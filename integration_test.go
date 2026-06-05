@@ -3,6 +3,7 @@ package pithsdk_test
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/chinudotdev/pith/gateway"
@@ -298,6 +299,104 @@ func TestSessionRunWithStream(t *testing.T) {
 	}
 	if len(deltas) <= 1 {
 		t.Fatalf("expected multiple stream deltas, got %d: %v", len(deltas), deltas)
+	}
+}
+
+func TestRegisterProviderFaux(t *testing.T) {
+	client, err := pithsdk.NewClient(pithsdk.ClientConfig{})
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+
+	faux := gateway.NewFauxProvider(
+		protocol.ApiAnthropicMessages,
+		"anthropic",
+		gateway.FauxResponse{Text: "Custom provider reply."},
+	)
+	if err := client.RegisterProvider(pithsdk.ProviderRegistration{
+		Provider: faux,
+		APIKey:   "test-key",
+		Models: []pithsdk.ModelPreset{
+			{ID: "claude-test"},
+		},
+	}); err != nil {
+		t.Fatalf("RegisterProvider: %v", err)
+	}
+
+	agent, err := pithsdk.NewAgent(pithsdk.AgentConfig{
+		Instructions: "You are helpful.",
+		Model:        "anthropic/claude-test",
+	})
+	if err != nil {
+		t.Fatalf("NewAgent: %v", err)
+	}
+
+	session, err := client.NewSession(agent)
+	if err != nil {
+		t.Fatalf("NewSession: %v", err)
+	}
+
+	result, err := session.Run(context.Background(), "Hi!")
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if result.Text != "Custom provider reply." {
+		t.Fatalf("expected custom provider text, got %q", result.Text)
+	}
+}
+
+func TestRegisterProviderUnknownModel(t *testing.T) {
+	client, err := pithsdk.NewClient(pithsdk.ClientConfig{})
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+
+	faux := gateway.NewFauxProvider(protocol.ApiAnthropicMessages, "anthropic")
+	if err := client.RegisterProvider(pithsdk.ProviderRegistration{
+		Provider: faux,
+		APIKey:   "test-key",
+		Models: []pithsdk.ModelPreset{
+			{ID: "claude-test"},
+		},
+	}); err != nil {
+		t.Fatalf("RegisterProvider: %v", err)
+	}
+
+	agent, err := pithsdk.NewAgent(pithsdk.AgentConfig{
+		Instructions: "You are helpful.",
+		Model:        "anthropic/missing-model",
+	})
+	if err != nil {
+		t.Fatalf("NewAgent: %v", err)
+	}
+
+	_, err = client.NewSession(agent)
+	if err == nil {
+		t.Fatal("expected error for unknown model")
+	}
+	if !strings.Contains(err.Error(), `unknown model "anthropic/missing-model"`) {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestRegisterProviderMissingCredential(t *testing.T) {
+	client, err := pithsdk.NewClient(pithsdk.ClientConfig{})
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+
+	faux := gateway.NewFauxProvider(protocol.ApiAnthropicMessages, "anthropic")
+	err = client.RegisterProvider(pithsdk.ProviderRegistration{
+		Provider: faux,
+		Models: []pithsdk.ModelPreset{
+			{ID: "claude-test"},
+		},
+	})
+	if err == nil {
+		t.Fatal("expected error for missing credentials")
+	}
+	if !strings.Contains(err.Error(), "credentials required") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

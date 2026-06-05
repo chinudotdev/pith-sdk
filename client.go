@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/chinudotdev/pith/gateway"
+	"github.com/chinudotdev/pith/protocol"
 	"github.com/chinudotdev/pith-sdk/internal/resolve"
 	"github.com/chinudotdev/pith-sdk/internal/wire"
 )
@@ -15,6 +16,8 @@ type Client struct {
 	defaultProvider string
 	defaultModel    string
 	defaultSettings *ModelSettings
+	credentials     credentialRegistry
+	registered      map[protocol.ProviderId]bool
 }
 
 // ClientConfig configures a new Client.
@@ -26,18 +29,24 @@ type ClientConfig struct {
 }
 
 // NewClient creates a client with a built-in OpenAI-compatible provider.
+// An OpenAI API key is optional at construction time; it is required when using
+// the default OpenAI provider at run time.
 func NewClient(cfg ClientConfig) (*Client, error) {
 	applyClientDefaults(&cfg)
-	apiKey, err := resolveAPIKey(cfg)
-	if err != nil {
-		return nil, err
-	}
-	return &Client{
-		gw:              setupDefaultGateway(apiKey),
+	creds := newCredentialRegistry()
+	creds.set(defaultProviderID, openAIResolver(resolveAPIKey(cfg)))
+
+	client := &Client{
+		gw:              setupDefaultGateway(creds),
 		defaultProvider: cfg.DefaultProvider,
 		defaultModel:    cfg.DefaultModel,
 		defaultSettings: cfg.DefaultSettings,
-	}, nil
+		credentials:     creds,
+		registered: map[protocol.ProviderId]bool{
+			defaultProviderID: true,
+		},
+	}
+	return client, nil
 }
 
 // NewClientFromGateway wraps a pre-wired gateway (e.g. for testing or custom setups).
@@ -46,7 +55,13 @@ func NewClientFromGateway(gw *gateway.LLMGateway) *Client {
 		gw:              gw,
 		defaultProvider: "faux",
 		defaultModel:    "faux-model",
+		credentials:     newCredentialRegistry(),
+		registered:      make(map[protocol.ProviderId]bool),
 	}
+}
+
+func (c *Client) syncCredentials() {
+	c.gw.Credentials = c.credentials.credentialProvider()
 }
 
 // NewSession creates a session for the given agent definition.
@@ -55,12 +70,12 @@ func (c *Client) NewSession(agent *Agent) (*Session, error) {
 		return nil, fmt.Errorf("agent is required")
 	}
 
-	modelID := agent.model
-	if modelID == "" {
-		modelID = c.defaultModel
+	modelString := agent.model
+	if modelString == "" {
+		modelString = c.defaultModel
 	}
 
-	model, err := resolve.Model(c.gw, c.defaultProvider, modelID)
+	model, err := resolve.Model(c.gw, c.defaultProvider, modelString)
 	if err != nil {
 		return nil, err
 	}

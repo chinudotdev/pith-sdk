@@ -6,7 +6,7 @@ Define an agent, run it, get text back. No gateway wiring, no `ModelDescriptor`,
 
 ## Who this is for
 
-App developers who want `Client` → `Agent` → `Session.Run` in ~15 lines, with optional custom providers (Anthropic, Groq, Ollama, etc.) coming in later releases.
+App developers who want `Client` → `Agent` → `Session.Run` in ~15 lines, with optional custom providers (Anthropic, Groq, Ollama, etc.).
 
 ## Who this is not for
 
@@ -94,6 +94,29 @@ For one-shot scripts without managing a session:
 result, _ := client.RunOnce(ctx, agent, "What is Go?")
 ```
 
+### Custom providers
+
+Register any `gateway.ProviderPort` (e.g. Anthropic) once on the client:
+
+```go
+client, _ := pithsdk.NewClient(pithsdk.ClientConfig{})
+
+client.RegisterProvider(pithsdk.ProviderRegistration{
+    Provider:  myAnthropicProvider,
+    APIKeyEnv: "ANTHROPIC_API_KEY",
+    Models: []pithsdk.ModelPreset{
+        {ID: "claude-sonnet-4-20250514", ContextWindow: 200_000, MaxTokens: 8192},
+    },
+})
+
+agent, _ := pithsdk.NewAgent(pithsdk.AgentConfig{
+    Model: "anthropic/claude-sonnet-4-20250514",
+    // ... same Agent API as OpenAI
+})
+```
+
+Use `provider/model` strings when not using the default OpenAI provider. See [examples/04-anthropic-provider](examples/04-anthropic-provider/) for a full custom provider implementation.
+
 ## Installation
 
 ```bash
@@ -109,6 +132,7 @@ Requires Go 1.24+.
 | [01-hello](examples/01-hello/) | Minimal agent run |
 | [02-tools](examples/02-tools/) | Agent with custom tools |
 | [03-multi-turn](examples/03-multi-turn/) | Multi-turn conversation with streaming |
+| [04-anthropic-provider](examples/04-anthropic-provider/) | Custom Anthropic provider via `RegisterProvider` |
 
 Run from the repo root:
 
@@ -116,14 +140,14 @@ Run from the repo root:
 OPENAI_API_KEY="sk-..." go run ./examples/01-hello/main.go
 OPENAI_API_KEY="sk-..." go run ./examples/02-tools/main.go
 OPENAI_API_KEY="sk-..." go run ./examples/03-multi-turn/main.go
+ANTHROPIC_API_KEY="sk-ant-..." go run ./examples/04-anthropic-provider/
 ```
 
 ## Roadmap
 
 See [plan.md](plan.md) for the full implementation plan. Upcoming:
 
-- **Phase 4:** `RegisterProvider` and custom providers
-- **Phase 5:** Polish, godoc, and `v0.1.0` release
+- **Phase 5:** Polish, godoc, CHANGELOG, and `v0.1.0` release
 
 ## License
 

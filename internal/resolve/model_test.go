@@ -25,24 +25,61 @@ func TestModelBareID(t *testing.T) {
 	}
 }
 
-func TestModelUnknown(t *testing.T) {
+func TestModelProviderSyntax(t *testing.T) {
 	gw := gateway.NewLLMGateway()
+	gw.Catalog.Register("anthropic", protocol.ModelDescriptor{
+		ID:       "claude-test",
+		Provider: "anthropic",
+	})
+
+	model, err := resolve.Model(gw, "openai", "anthropic/claude-test")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if model.ID != "claude-test" {
+		t.Fatalf("expected claude-test, got %q", model.ID)
+	}
+}
+
+func TestModelUnknownProvider(t *testing.T) {
+	gw := gateway.NewLLMGateway()
+	_, err := resolve.Model(gw, "openai", "anthropic/claude-sonnet")
+	if err == nil {
+		t.Fatal("expected error for unknown provider")
+	}
+	if !strings.Contains(err.Error(), `unknown provider "anthropic": not registered`) {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestModelUnknownModelInRegisteredProvider(t *testing.T) {
+	gw := gateway.NewLLMGateway()
+	gw.Catalog.Register("anthropic", protocol.ModelDescriptor{
+		ID:       "claude-test",
+		Provider: "anthropic",
+	})
+
+	_, err := resolve.Model(gw, "openai", "anthropic/claude-foo")
+	if err == nil {
+		t.Fatal("expected error for unknown model")
+	}
+	if !strings.Contains(err.Error(), `unknown model "anthropic/claude-foo": provider "anthropic" registered but model not found`) {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestModelUnknownBareID(t *testing.T) {
+	gw := gateway.NewLLMGateway()
+	gw.Catalog.Register("openai", protocol.ModelDescriptor{
+		ID:       "gpt-4o-mini",
+		Provider: "openai",
+	})
+
 	_, err := resolve.Model(gw, "openai", "missing-model")
 	if err == nil {
 		t.Fatal("expected error for unknown model")
 	}
 	if !strings.Contains(err.Error(), `unknown model "missing-model"`) {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestModelProviderSyntaxNotSupported(t *testing.T) {
-	gw := gateway.NewLLMGateway()
-	_, err := resolve.Model(gw, "openai", "anthropic/claude-sonnet")
-	if err == nil {
-		t.Fatal("expected error for provider/model syntax")
-	}
-	if !strings.Contains(err.Error(), "not supported yet") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
