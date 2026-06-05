@@ -4,6 +4,7 @@ import (
 	"context"
 
 	pithagent "github.com/chinudotdev/pith/agent"
+	"github.com/chinudotdev/pith-sdk/internal/stream"
 	"github.com/chinudotdev/pith-sdk/internal/summary"
 	"github.com/chinudotdev/pith-sdk/internal/wire"
 )
@@ -12,6 +13,17 @@ import (
 type Session struct {
 	ag    *pithagent.Agent
 	scope *wire.RunScopeHolder
+}
+
+// Messages returns the current session transcript.
+func (s *Session) Messages() []MessageSummary {
+	state := s.ag.State()
+	return toPublicSummaries(summary.ToSummaries(state.Messages))
+}
+
+// Reset clears the session transcript and queued messages.
+func (s *Session) Reset() {
+	s.ag.Reset()
 }
 
 // Run sends input to the agent and returns the final text result.
@@ -27,6 +39,13 @@ func (s *Session) Run(ctx context.Context, input string, opts ...RunOption) (*Ru
 	if s.scope != nil {
 		s.scope.Set(ctx, ro.Context)
 		defer s.scope.Clear()
+	}
+
+	if ro.Stream != nil {
+		unsub := stream.SubscribeTextDeltas(s.ag.EventBus(), func(delta, accumulated string) {
+			ro.Stream(TextChunk{Delta: delta, Text: accumulated})
+		})
+		defer unsub()
 	}
 
 	err := s.ag.Prompt(ctx, input)

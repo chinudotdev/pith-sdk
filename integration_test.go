@@ -176,3 +176,150 @@ func TestToolContextLocal(t *testing.T) {
 		t.Fatalf("expected label test-db, got %q", got.Label)
 	}
 }
+
+func TestSessionMultiTurn(t *testing.T) {
+	gw := gateway.NewFauxGateway(
+		gateway.FauxResponse{Text: "First reply."},
+		gateway.FauxResponse{Text: "Second reply."},
+	)
+	client := pithsdk.NewClientFromGateway(gw)
+
+	agent, err := pithsdk.NewAgent(pithsdk.AgentConfig{
+		Instructions: "You are helpful.",
+		Model:        "faux-model",
+	})
+	if err != nil {
+		t.Fatalf("NewAgent: %v", err)
+	}
+
+	session, err := client.NewSession(agent)
+	if err != nil {
+		t.Fatalf("NewSession: %v", err)
+	}
+
+	if _, err := session.Run(context.Background(), "Turn one."); err != nil {
+		t.Fatalf("first Run: %v", err)
+	}
+
+	result, err := session.Run(context.Background(), "Turn two.")
+	if err != nil {
+		t.Fatalf("second Run: %v", err)
+	}
+	if result.Text != "Second reply." {
+		t.Fatalf("expected second reply text, got %q", result.Text)
+	}
+
+	msgs := session.Messages()
+	if len(msgs) != 4 {
+		t.Fatalf("expected 4 messages, got %d: %+v", len(msgs), msgs)
+	}
+	wantRoles := []string{"user", "assistant", "user", "assistant"}
+	for i, role := range wantRoles {
+		if msgs[i].Role != role {
+			t.Fatalf("message %d: expected role %q, got %q", i, role, msgs[i].Role)
+		}
+	}
+}
+
+func TestSessionReset(t *testing.T) {
+	gw := gateway.NewFauxGateway(
+		gateway.FauxResponse{Text: "Before reset."},
+		gateway.FauxResponse{Text: "After reset."},
+	)
+	client := pithsdk.NewClientFromGateway(gw)
+
+	agent, err := pithsdk.NewAgent(pithsdk.AgentConfig{
+		Instructions: "You are helpful.",
+		Model:        "faux-model",
+	})
+	if err != nil {
+		t.Fatalf("NewAgent: %v", err)
+	}
+
+	session, err := client.NewSession(agent)
+	if err != nil {
+		t.Fatalf("NewSession: %v", err)
+	}
+
+	if _, err := session.Run(context.Background(), "First."); err != nil {
+		t.Fatalf("first Run: %v", err)
+	}
+	if len(session.Messages()) != 2 {
+		t.Fatalf("expected 2 messages before reset, got %d", len(session.Messages()))
+	}
+
+	session.Reset()
+	if len(session.Messages()) != 0 {
+		t.Fatalf("expected 0 messages after reset, got %d", len(session.Messages()))
+	}
+
+	result, err := session.Run(context.Background(), "Second.")
+	if err != nil {
+		t.Fatalf("second Run: %v", err)
+	}
+	if result.Text != "After reset." {
+		t.Fatalf("expected after reset text, got %q", result.Text)
+	}
+	if len(session.Messages()) != 2 {
+		t.Fatalf("expected 2 messages after fresh run, got %d", len(session.Messages()))
+	}
+}
+
+func TestSessionRunWithStream(t *testing.T) {
+	gw := gateway.NewFauxGateway(
+		gateway.FauxResponse{Text: "Hello, world!"},
+	)
+	client := pithsdk.NewClientFromGateway(gw)
+
+	agent, err := pithsdk.NewAgent(pithsdk.AgentConfig{
+		Instructions: "You are helpful.",
+		Model:        "faux-model",
+	})
+	if err != nil {
+		t.Fatalf("NewAgent: %v", err)
+	}
+
+	session, err := client.NewSession(agent)
+	if err != nil {
+		t.Fatalf("NewSession: %v", err)
+	}
+
+	var deltas []string
+	result, err := session.Run(context.Background(), "Hi!", pithsdk.WithStream(func(c pithsdk.TextChunk) {
+		if c.Delta != "" {
+			deltas = append(deltas, c.Delta)
+		}
+	}))
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if result.Text != "Hello, world!" {
+		t.Fatalf("expected final text, got %q", result.Text)
+	}
+	if len(deltas) <= 1 {
+		t.Fatalf("expected multiple stream deltas, got %d: %v", len(deltas), deltas)
+	}
+}
+
+func TestClientRunOnce(t *testing.T) {
+	gw := gateway.NewFauxGateway(
+		gateway.FauxResponse{Text: "One-shot reply."},
+	)
+	client := pithsdk.NewClientFromGateway(gw)
+
+	agent, err := pithsdk.NewAgent(pithsdk.AgentConfig{
+		Instructions: "You are helpful.",
+		Model:        "faux-model",
+	})
+	if err != nil {
+		t.Fatalf("NewAgent: %v", err)
+	}
+
+	result, err := client.RunOnce(context.Background(), agent, "Quick question.")
+	if err != nil {
+		t.Fatalf("RunOnce: %v", err)
+	}
+	if result.Text != "One-shot reply." {
+		t.Fatalf("expected one-shot text, got %q", result.Text)
+	}
+}

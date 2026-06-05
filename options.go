@@ -17,6 +17,14 @@ func WithInstructions(instructions string) RunOption {
 	}
 }
 
+// WithStream registers a callback for streaming assistant text deltas during the run.
+// When nil (default), Run blocks until the full response is ready.
+func WithStream(fn func(TextChunk)) RunOption {
+	return func(o *RunOptions) {
+		o.Stream = fn
+	}
+}
+
 func applyRunOptions(opts []RunOption) RunOptions {
 	var ro RunOptions
 	for _, opt := range opts {

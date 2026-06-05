@@ -67,6 +67,33 @@ Pass run-scoped dependencies to tools with `WithContext`:
 session.Run(ctx, "What's the weather?", pithsdk.WithContext(myDeps))
 ```
 
+### Multi-turn sessions
+
+Reuse a `Session` to keep conversation history across runs:
+
+```go
+session, _ := client.NewSession(agent)
+session.Run(ctx, "My name is Alex.")
+result, _ := session.Run(ctx, "What is my name?")
+fmt.Println(result.Text)
+fmt.Println(len(session.Messages())) // full transcript
+session.Reset()                      // start fresh
+```
+
+Stream assistant text as it arrives:
+
+```go
+session.Run(ctx, "Tell me a joke.", pithsdk.WithStream(func(c pithsdk.TextChunk) {
+    fmt.Print(c.Delta)
+}))
+```
+
+For one-shot scripts without managing a session:
+
+```go
+result, _ := client.RunOnce(ctx, agent, "What is Go?")
+```
+
 ## Installation
 
 ```bash
@@ -81,20 +108,22 @@ Requires Go 1.24+.
 |---------|-------------|
 | [01-hello](examples/01-hello/) | Minimal agent run |
 | [02-tools](examples/02-tools/) | Agent with custom tools |
+| [03-multi-turn](examples/03-multi-turn/) | Multi-turn conversation with streaming |
 
 Run from the repo root:
 
 ```bash
 OPENAI_API_KEY="sk-..." go run ./examples/01-hello/main.go
 OPENAI_API_KEY="sk-..." go run ./examples/02-tools/main.go
+OPENAI_API_KEY="sk-..." go run ./examples/03-multi-turn/main.go
 ```
 
 ## Roadmap
 
 See [plan.md](plan.md) for the full implementation plan. Upcoming:
 
-- **Phase 3:** Multi-turn sessions, streaming, `RunOnce`
 - **Phase 4:** `RegisterProvider` and custom providers
+- **Phase 5:** Polish, godoc, and `v0.1.0` release
 
 ## License
 

@@ -67,6 +67,11 @@ func messageText(msg protocol.Message) string {
 	}
 }
 
+// AssistantText returns the text content from an assistant message.
+func AssistantText(am protocol.AssistantMessage) string {
+	return assistantText(am)
+}
+
 func assistantText(am protocol.AssistantMessage) string {
 	var parts []string
 	for _, block := range am.Content {
