@@ -6,12 +6,20 @@ import (
 	pithsdk "github.com/chinudotdev/pith-sdk"
 )
 
-func TestNewAgentRejectsTools(t *testing.T) {
-	_, err := pithsdk.NewAgent(pithsdk.AgentConfig{
-		Tools: []pithsdk.Tool{{}},
+func TestNewAgentAcceptsTools(t *testing.T) {
+	tool := pithsdk.NewTool("noop", "No-op tool.",
+		func(ctx pithsdk.ToolContext, args struct{}) (string, error) {
+			return "ok", nil
+		},
+	)
+	agent, err := pithsdk.NewAgent(pithsdk.AgentConfig{
+		Tools: []pithsdk.Tool{tool},
 	})
-	if err == nil {
-		t.Fatal("expected error when tools are provided")
+	if err != nil {
+		t.Fatalf("NewAgent with tools: %v", err)
+	}
+	if agent == nil {
+		t.Fatal("expected agent")
 	}
 }
 

@@ -22,5 +22,6 @@ type UsageSummary struct {
 
 // RunOptions configures a single run. Apply via RunOption functions.
 type RunOptions struct {
+	Context      any
 	Instructions string
 }

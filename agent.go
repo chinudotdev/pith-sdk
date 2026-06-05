@@ -1,15 +1,11 @@
 package pithsdk
 
-import "fmt"
-
-// Tool is an opaque tool definition. Use NewTool in a future release.
-type Tool struct{}
-
-// Agent is a specialist definition: name, instructions, model, and settings.
+// Agent is a specialist definition: name, instructions, model, tools, and settings.
 type Agent struct {
 	name         string
 	instructions string
 	model        string
+	tools        []Tool
 	settings     *ModelSettings
 }
 
@@ -22,15 +18,13 @@ type AgentConfig struct {
 	Settings     *ModelSettings
 }
 
-// NewAgent creates an agent definition. Tools are not supported in v0.1 yet.
+// NewAgent creates an agent definition.
 func NewAgent(cfg AgentConfig) (*Agent, error) {
-	if len(cfg.Tools) > 0 {
-		return nil, fmt.Errorf("tools are not supported yet")
-	}
 	return &Agent{
 		name:         cfg.Name,
 		instructions: cfg.Instructions,
 		model:        cfg.Model,
+		tools:        cfg.Tools,
 		settings:     cfg.Settings,
 	}, nil
 }

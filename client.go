@@ -65,12 +65,14 @@ func (c *Client) NewSession(agent *Agent) (*Session, error) {
 	}
 
 	settings := mergeSettings(c.defaultSettings, agent.settings)
+	scope := wire.NewRunScopeHolder()
+	loopTools := toWireTools(agent.tools, scope)
 	ag := wire.NewAgent(c.gw, model, agent.instructions, wire.Settings{
 		Temperature: settings.Temperature,
 		MaxTokens:   settings.MaxTokens,
-	})
+	}, loopTools)
 
-	return &Session{ag: ag}, nil
+	return &Session{ag: ag, scope: scope}, nil
 }
 
 func mergeSettings(base, override *ModelSettings) ModelSettings {

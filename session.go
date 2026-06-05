@@ -5,11 +5,13 @@ import (
 
 	pithagent "github.com/chinudotdev/pith/agent"
 	"github.com/chinudotdev/pith-sdk/internal/summary"
+	"github.com/chinudotdev/pith-sdk/internal/wire"
 )
 
 // Session runs an agent and holds its transcript for the current session.
 type Session struct {
-	ag *pithagent.Agent
+	ag    *pithagent.Agent
+	scope *wire.RunScopeHolder
 }
 
 // Run sends input to the agent and returns the final text result.
@@ -20,6 +22,11 @@ func (s *Session) Run(ctx context.Context, input string, opts ...RunOption) (*Ru
 	if ro.Instructions != "" {
 		s.ag.SetSystemPrompt(ro.Instructions)
 		defer s.ag.SetSystemPrompt(originalPrompt)
+	}
+
+	if s.scope != nil {
+		s.scope.Set(ctx, ro.Context)
+		defer s.scope.Clear()
 	}
 
 	err := s.ag.Prompt(ctx, input)
