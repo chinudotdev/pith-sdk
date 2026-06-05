@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/chinudotdev/pith/gateway"
 	pithsdk "github.com/chinudotdev/pith-sdk"
 )
 
@@ -23,6 +24,45 @@ func TestNewAgentAcceptsTools(t *testing.T) {
 	if agent == nil {
 		t.Fatal("expected agent")
 	}
+}
+
+func TestConcurrentRunRejected(t *testing.T) {
+	gw := gateway.NewFauxGateway(
+		gateway.FauxResponse{Text: "Hello."},
+	)
+	client := pithsdk.NewClientFromGateway(gw)
+
+	agent, err := pithsdk.NewAgent(pithsdk.AgentConfig{
+		Instructions: "You are helpful.",
+		Model:        "faux-model",
+	})
+	if err != nil {
+		t.Fatalf("NewAgent: %v", err)
+	}
+
+	session, err := client.NewSession(agent)
+	if err != nil {
+		t.Fatalf("NewSession: %v", err)
+	}
+
+	started := make(chan struct{})
+	done := make(chan struct{})
+	go func() {
+		close(started)
+		_, _ = session.Run(context.Background(), "First")
+		close(done)
+	}()
+
+	<-started
+	_, err = session.Run(context.Background(), "Second")
+	if err == nil {
+		t.Fatal("expected error for concurrent Run")
+	}
+	if !strings.Contains(err.Error(), "concurrent Session.Run is not supported") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	<-done
 }
 
 func TestNewClientMissingAPIKeyDeferred(t *testing.T) {

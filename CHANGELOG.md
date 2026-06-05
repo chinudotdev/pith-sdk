@@ -4,6 +4,51 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.3.0] - 2026-06-06
+
+### Removed
+
+- `Client.RunOnce` — use `NewSession` + `Run`
+- `RawTool` — use `NewClientFromGateway` + `pith/loop` for advanced cases
+- `NewDynamicTool` — use `mcp.Tools()` for schema-driven tools
+- `Hooks.ShouldStopAfterTurn` and `TurnContext` — use `WithMaxTurns` or app-side abort
+- `AgentConfig.Name` and `AgentName` on hook contexts — pass labels via `WithContext`
+
+### Changed
+
+- `MessageSummary` is now a type alias to `internal/summary.MessageSummary` (no copy loop)
+- Streaming text delta subscription inlined into `session.go`; `internal/stream` removed
+- `MarshalSchema` moved to `mcp/schema.go`; `internal/dynamic_tool.go` removed
+- CI builds `examples/05-mcp` only when `mcp/**` or `examples/05-mcp/**` changes
+
+### Migration
+
+```go
+// Before (v0.2.x)
+result, _ := client.RunOnce(ctx, agent, input)
+
+// After (v0.3.0)
+session, _ := client.NewSession(agent)
+result, _ := session.Run(ctx, input)
+```
+
+## [0.2.1] - 2026-06-06
+
+### Changed
+
+- Unified hook execution: `WrapRawTool` now routes through `RunWithHooks` (single hook path)
+- `RunWithHooks` shallow-copies tool params before hooks and invoke
+- `Session.Run` rejects concurrent calls with an explicit error
+- MCP tests build mock server once via `TestMain` (faster CI/local runs)
+- `examples/05-mcp` tries monorepo and standalone echo-server paths
+
+### Added
+
+- `internal/wire/hooks_test.go` — block, override, and hook-error wire tests
+- `TestConcurrentRunRejected` in `session_test.go`
+- CI step: `go test -race ./...`
+- README "Defended Requirements" section; trimmed `plan.md`
+
 ## [0.2.0] - 2026-06-05
 
 ### Added

@@ -16,8 +16,8 @@ type RunScope struct {
 
 // HookSet holds SDK-level hooks for tool call lifecycle.
 type HookSet struct {
-	BeforeToolCall func(sessionID, runID, agentName, toolName, callID string, args map[string]any) (block bool, reason string, err error)
-	AfterToolCall  func(sessionID, runID, agentName, toolName, callID string, args map[string]any, result string, resultErr error) (override string, err error)
+	BeforeToolCall func(sessionID, runID, toolName, callID string, args map[string]any) (block bool, reason string, err error)
+	AfterToolCall  func(sessionID, runID, toolName, callID string, args map[string]any, result string, resultErr error) (override string, err error)
 }
 
 // RunScopeHolder stores the active run scope for tool execution.

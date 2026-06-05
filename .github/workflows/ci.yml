@@ -25,5 +25,22 @@ jobs:
       - name: Test
         run: go test ./...
 
-      - name: Build examples
-        run: go build ./examples/...
+      - name: Test with race detector
+        run: go test -race ./...
+
+      - name: Build core examples
+        run: |
+          go build ./examples/01-hello/...
+          go build ./examples/02-tools/...
+
+      - uses: dorny/paths-filter@v3
+        id: changes
+        with:
+          filters: |
+            mcp:
+              - 'mcp/**'
+              - 'examples/05-mcp/**'
+
+      - name: Build MCP example
+        if: steps.changes.outputs.mcp == 'true'
+        run: go build ./examples/05-mcp/...

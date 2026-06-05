@@ -14,23 +14,32 @@ import (
 	"github.com/chinudotdev/pith-sdk/mcp"
 )
 
-// buildMockServer builds a small MCP server binary that exposes a single "echo" tool.
-func buildMockServer(t *testing.T) string {
-	t.Helper()
-	dir := t.TempDir()
-	bin := filepath.Join(dir, "mock-mcp-server")
+var mockServerBin string
 
+func TestMain(m *testing.M) {
+	dir, err := os.MkdirTemp("", "pith-sdk-mcp-mock-*")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "create temp dir: %v\n", err)
+		os.Exit(1)
+	}
+	defer os.RemoveAll(dir)
+
+	bin := filepath.Join(dir, "mock-mcp-server")
 	src := filepath.Join(dir, "main.go")
 	if err := os.WriteFile(src, []byte(mockServerSrc), 0o644); err != nil {
-		t.Fatalf("write mock server src: %v", err)
+		fmt.Fprintf(os.Stderr, "write mock server src: %v\n", err)
+		os.Exit(1)
 	}
 
 	cmd := exec.Command("go", "build", "-o", bin, src)
 	cmd.Env = append(os.Environ(), "GOOS="+os.Getenv("GOOS"), "GOARCH="+os.Getenv("GOARCH"))
 	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("build mock server: %v\n%s", err, out)
+		fmt.Fprintf(os.Stderr, "build mock server: %v\n%s", err, out)
+		os.Exit(1)
 	}
-	return bin
+
+	mockServerBin = bin
+	os.Exit(m.Run())
 }
 
 const mockServerSrc = `package main
@@ -60,10 +69,8 @@ func main() {
 `
 
 func TestMCPToolsDiscovery(t *testing.T) {
-	bin := buildMockServer(t)
-
 	tools, close, err := mcp.Tools(context.Background(), mcp.Config{
-		Command: bin,
+		Command: mockServerBin,
 	})
 	if err != nil {
 		t.Fatalf("mcp.Tools: %v", err)
@@ -76,10 +83,8 @@ func TestMCPToolsDiscovery(t *testing.T) {
 }
 
 func TestMCPToolsWithAgent(t *testing.T) {
-	bin := buildMockServer(t)
-
 	mcpTools, close, err := mcp.Tools(context.Background(), mcp.Config{
-		Command: bin,
+		Command: mockServerBin,
 	})
 	if err != nil {
 		t.Fatalf("mcp.Tools: %v", err)
@@ -115,10 +120,8 @@ func TestMCPConfigValidation(t *testing.T) {
 }
 
 func TestMCPInvokeViaAgent(t *testing.T) {
-	bin := buildMockServer(t)
-
 	mcpTools, close, err := mcp.Tools(context.Background(), mcp.Config{
-		Command: bin,
+		Command: mockServerBin,
 	})
 	if err != nil {
 		t.Fatalf("mcp.Tools: %v", err)
@@ -170,10 +173,8 @@ func TestMCPInvokeViaAgent(t *testing.T) {
 }
 
 func TestMCPHooksFire(t *testing.T) {
-	bin := buildMockServer(t)
-
 	mcpTools, close, err := mcp.Tools(context.Background(), mcp.Config{
-		Command: bin,
+		Command: mockServerBin,
 	})
 	if err != nil {
 		t.Fatalf("mcp.Tools: %v", err)

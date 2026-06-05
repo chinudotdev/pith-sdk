@@ -439,29 +439,6 @@ func TestSessionRunMaxTurnsExceeded(t *testing.T) {
 	}
 }
 
-func TestClientRunOnce(t *testing.T) {
-	gw := gateway.NewFauxGateway(
-		gateway.FauxResponse{Text: "One-shot reply."},
-	)
-	client := pithsdk.NewClientFromGateway(gw)
-
-	agent, err := pithsdk.NewAgent(pithsdk.AgentConfig{
-		Instructions: "You are helpful.",
-		Model:        "faux-model",
-	})
-	if err != nil {
-		t.Fatalf("NewAgent: %v", err)
-	}
-
-	result, err := client.RunOnce(context.Background(), agent, "Quick question.")
-	if err != nil {
-		t.Fatalf("RunOnce: %v", err)
-	}
-	if result.Text != "One-shot reply." {
-		t.Fatalf("expected one-shot text, got %q", result.Text)
-	}
-}
-
 func TestSessionAutoID(t *testing.T) {
 	gw := gateway.NewFauxGateway(
 		gateway.FauxResponse{Text: "Hello."},

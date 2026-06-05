@@ -1,6 +1,11 @@
 package pithsdk
 
+import "github.com/chinudotdev/pith-sdk/internal/summary"
+
 const defaultMaxTurns = 10
+
+// MessageSummary is a simplified view of a transcript message.
+type MessageSummary = summary.MessageSummary
 
 // RunResult is the outcome of a single Session.Run call.
 type RunResult struct {
@@ -12,14 +17,6 @@ type RunResult struct {
 	Messages []MessageSummary
 	// Usage reports token usage from the last assistant response, if available.
 	Usage *UsageSummary
-}
-
-// MessageSummary is a simplified view of a transcript message.
-type MessageSummary struct {
-	// Role is the message role (e.g. "user", "assistant", "toolResult").
-	Role string
-	// Text is the message text content.
-	Text string
 }
 
 // UsageSummary reports token usage from the last assistant response.

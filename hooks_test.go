@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/chinudotdev/pith/gateway"
-	"github.com/chinudotdev/pith/loop"
 	"github.com/chinudotdev/pith/protocol"
 	pithsdk "github.com/chinudotdev/pith-sdk"
 )
@@ -174,61 +173,6 @@ func TestAfterToolCallOverride(t *testing.T) {
 	}
 }
 
-func TestShouldStopAfterTurn(t *testing.T) {
-	noop := pithsdk.NewTool("noop", "No-op tool.",
-		func(ctx pithsdk.ToolContext, args struct{}) (string, error) {
-			return "ok", nil
-		},
-	)
-
-	// Return multiple tool call responses to simulate multi-turn
-	gw := gateway.NewFauxGateway(
-		gateway.FauxResponse{
-			ToolCalls: []protocol.ToolCall{
-				{Type: "toolCall", ID: "tc1", Name: "noop", Arguments: `{}`},
-			},
-		},
-		gateway.FauxResponse{
-			ToolCalls: []protocol.ToolCall{
-				{Type: "toolCall", ID: "tc2", Name: "noop", Arguments: `{}`},
-			},
-		},
-		gateway.FauxResponse{Text: "Final."},
-	)
-	client := pithsdk.NewClientFromGateway(gw)
-
-	agent, err := pithsdk.NewAgent(pithsdk.AgentConfig{
-		Instructions: "Use tools.",
-		Model:        "faux-model",
-		Tools:        []pithsdk.Tool{noop},
-	})
-	if err != nil {
-		t.Fatalf("NewAgent: %v", err)
-	}
-
-	session, err := client.NewSession(agent)
-	if err != nil {
-		t.Fatalf("NewSession: %v", err)
-	}
-
-	var turnNumbers []int
-	_, err = session.Run(context.Background(), "Go", pithsdk.WithMaxTurns(10), pithsdk.WithHooks(pithsdk.Hooks{
-		ShouldStopAfterTurn: func(ctx pithsdk.TurnContext) bool {
-			turnNumbers = append(turnNumbers, ctx.TurnNumber)
-			return ctx.TurnNumber >= 1 // stop after first turn
-		},
-	}))
-	if err != nil {
-		t.Fatalf("Run: %v", err)
-	}
-	if len(turnNumbers) == 0 {
-		t.Fatal("expected ShouldStopAfterTurn to be called")
-	}
-	if turnNumbers[0] != 1 {
-		t.Fatalf("expected first turn number 1, got %d", turnNumbers[0])
-	}
-}
-
 func TestHookContextIDs(t *testing.T) {
 	weather := pithsdk.NewTool("get_weather", "Return weather.",
 		func(ctx pithsdk.ToolContext, args struct {
@@ -249,7 +193,6 @@ func TestHookContextIDs(t *testing.T) {
 	client := pithsdk.NewClientFromGateway(gw)
 
 	agent, err := pithsdk.NewAgent(pithsdk.AgentConfig{
-		Name:         "weather-agent",
 		Instructions: "Use tools.",
 		Model:        "faux-model",
 		Tools:        []pithsdk.Tool{weather},
@@ -263,12 +206,11 @@ func TestHookContextIDs(t *testing.T) {
 		t.Fatalf("NewSession: %v", err)
 	}
 
-	var gotRunID, gotSessionID, gotAgentName string
+	var gotRunID, gotSessionID string
 	_, err = session.Run(context.Background(), "Go", pithsdk.WithRunID("run-hook"), pithsdk.WithHooks(pithsdk.Hooks{
 		BeforeToolCall: func(ctx pithsdk.BeforeToolContext) (*pithsdk.BeforeToolResult, error) {
 			gotRunID = ctx.RunID
 			gotSessionID = ctx.SessionID
-			gotAgentName = ctx.AgentName
 			return nil, nil
 		},
 	}))
@@ -280,9 +222,6 @@ func TestHookContextIDs(t *testing.T) {
 	}
 	if gotSessionID != "sess-hook" {
 		t.Fatalf("expected SessionID sess-hook, got %q", gotSessionID)
-	}
-	if gotAgentName != "weather-agent" {
-		t.Fatalf("expected AgentName weather-agent, got %q", gotAgentName)
 	}
 }
 
@@ -395,87 +334,8 @@ func TestAfterToolCallOverrideOnError(t *testing.T) {
 	}
 }
 
-func TestRawToolHooksFire(t *testing.T) {
-	raw := pithsdk.RawTool(loop.AgentTool{
-		Name:        "raw_echo",
-		Label:       "raw_echo",
-		Description: "Echo via RawTool.",
-		Execute: func(callID string, params map[string]any, signal <-chan struct{}, onUpdate func(partial any)) loop.ToolResult {
-			text, _ := params["text"].(string)
-			return loop.ToolResult{
-				Content: []protocol.Content{protocol.TextContent{Type: "text", Text: text}},
-			}
-		},
-	})
-
-	gw := gateway.NewFauxGateway(
-		gateway.FauxResponse{
-			ToolCalls: []protocol.ToolCall{
-				{Type: "toolCall", ID: "tc-raw", Name: "raw_echo", Arguments: `{"text":"hello"}`},
-			},
-		},
-		gateway.FauxResponse{Text: "Done."},
-	)
-	client := pithsdk.NewClientFromGateway(gw)
-
-	agent, err := pithsdk.NewAgent(pithsdk.AgentConfig{
-		Instructions: "Use tools.",
-		Model:        "faux-model",
-		Tools:        []pithsdk.Tool{raw},
-	})
-	if err != nil {
-		t.Fatalf("NewAgent: %v", err)
-	}
-
-	session, err := client.NewSession(agent)
-	if err != nil {
-		t.Fatalf("NewSession: %v", err)
-	}
-
-	var calledBefore, calledAfter bool
-	result, err := session.Run(context.Background(), "Go", pithsdk.WithHooks(pithsdk.Hooks{
-		BeforeToolCall: func(ctx pithsdk.BeforeToolContext) (*pithsdk.BeforeToolResult, error) {
-			calledBefore = true
-			if ctx.ToolName != "raw_echo" {
-				t.Fatalf("expected tool name raw_echo, got %q", ctx.ToolName)
-			}
-			if ctx.CallID != "tc-raw" {
-				t.Fatalf("expected call ID tc-raw, got %q", ctx.CallID)
-			}
-			return nil, nil
-		},
-		AfterToolCall: func(ctx pithsdk.AfterToolContext) (*pithsdk.AfterToolResult, error) {
-			calledAfter = true
-			if ctx.Result != "hello" {
-				t.Fatalf("expected tool result hello, got %q", ctx.Result)
-			}
-			return nil, nil
-		},
-	}))
-	if err != nil {
-		t.Fatalf("Run: %v", err)
-	}
-	if !calledBefore {
-		t.Fatal("expected BeforeToolCall to fire for RawTool")
-	}
-	if !calledAfter {
-		t.Fatal("expected AfterToolCall to fire for RawTool")
-	}
-
-	var foundToolResult bool
-	for _, msg := range result.Messages {
-		if msg.Role == "toolResult" && msg.Text == "hello" {
-			foundToolResult = true
-		}
-	}
-	if !foundToolResult {
-		t.Fatalf("expected raw tool result in messages, got %+v", result.Messages)
-	}
-}
-
 func TestMCPTracingIDs(t *testing.T) {
-	// NewDynamicTool uses the same hook path MCP will use after migration.
-	dynamic := pithsdk.NewDynamicTool("echo", "Echo text.", map[string]any{
+	dynamic := pithsdk.ToolFromDynamicSchema("echo", "Echo text.", map[string]any{
 		"type": "object",
 		"properties": map[string]any{
 			"text": map[string]any{"type": "string"},
@@ -496,7 +356,6 @@ func TestMCPTracingIDs(t *testing.T) {
 	client := pithsdk.NewClientFromGateway(gw)
 
 	agent, err := pithsdk.NewAgent(pithsdk.AgentConfig{
-		Name:         "mcp-agent",
 		Instructions: "Use tools.",
 		Model:        "faux-model",
 		Tools:        []pithsdk.Tool{dynamic},
@@ -510,12 +369,11 @@ func TestMCPTracingIDs(t *testing.T) {
 		t.Fatalf("NewSession: %v", err)
 	}
 
-	var gotRunID, gotSessionID, gotAgentName string
+	var gotRunID, gotSessionID string
 	_, err = session.Run(context.Background(), "Go", pithsdk.WithRunID("run-mcp"), pithsdk.WithHooks(pithsdk.Hooks{
 		BeforeToolCall: func(ctx pithsdk.BeforeToolContext) (*pithsdk.BeforeToolResult, error) {
 			gotRunID = ctx.RunID
 			gotSessionID = ctx.SessionID
-			gotAgentName = ctx.AgentName
 			if ctx.ToolName != "echo" {
 				t.Fatalf("expected tool name echo, got %q", ctx.ToolName)
 			}
@@ -530,8 +388,5 @@ func TestMCPTracingIDs(t *testing.T) {
 	}
 	if gotSessionID != "sess-mcp" {
 		t.Fatalf("expected SessionID sess-mcp, got %q", gotSessionID)
-	}
-	if gotAgentName != "mcp-agent" {
-		t.Fatalf("expected AgentName mcp-agent, got %q", gotAgentName)
 	}
 }

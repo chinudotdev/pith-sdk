@@ -12,6 +12,29 @@ App developers who want `Client` → `Agent` → `Session.Run` in ~15 lines, wit
 
 Library authors and provider implementers who need direct control over the gateway, loop, or protocol layers. Use [pith](https://github.com/chinudotdev/pith) directly.
 
+## Defended requirements
+
+pith-sdk optimizes for a small, stable surface:
+
+- **~15-line run path** — `Client` → `Agent` → `Session.Run` → text back
+- **Hidden `pith` wiring** — no gateway, loop, or protocol imports in app code
+- **Typed tools** — `NewTool[T]` with struct-based JSON Schema
+- **Sessions** — multi-turn transcript via `Session.Messages()` / `Reset()`
+- **Providers** — built-in OpenAI-compat plus `RegisterProvider` for custom backends
+- **Hooks** — HITL approval, logging, and output redaction via `BeforeToolCall` / `AfterToolCall`
+- **Tracing IDs** — `SessionID`, `RunID`, `CallID` for external observability (OpenTelemetry, Datadog, etc.)
+- **MCP as tool source** — `mcp.Tools()` composes with local tools
+
+**Escape hatches deferred for v1 review** (removed in v0.3.0; use alternatives below):
+
+| Removed API | Replacement |
+|-------------|-------------|
+| `RunOnce` | `NewSession` + `Run` (two lines) |
+| `RawTool` | `NewClientFromGateway` + `pith/loop` directly |
+| `NewDynamicTool` | `mcp.Tools()` for schema-driven tools |
+| `ShouldStopAfterTurn` | `WithMaxTurns` or app-side abort |
+| `Agent.Name` | Pass labels via `WithContext` |
+
 ## Quick start
 
 ```go
@@ -31,7 +54,6 @@ func main() {
     })
 
     agent, _ := pithsdk.NewAgent(pithsdk.AgentConfig{
-        Name:         "Assistant",
         Instructions: "You are helpful. Be concise.",
         Model:        "gpt-4o-mini",
     })
@@ -54,7 +76,6 @@ weather := pithsdk.NewTool("get_weather", "Return weather for a city.",
 )
 
 agent, _ := pithsdk.NewAgent(pithsdk.AgentConfig{
-    Name:         "Weather bot",
     Instructions: "You are a helpful weather bot.",
     Model:        "gpt-4o-mini",
     Tools:        []pithsdk.Tool{weather},
@@ -86,12 +107,6 @@ Stream assistant text as it arrives:
 session.Run(ctx, "Tell me a joke.", pithsdk.WithStream(func(c pithsdk.TextChunk) {
     fmt.Print(c.Delta)
 }))
-```
-
-For one-shot scripts without managing a session:
-
-```go
-result, _ := client.RunOnce(ctx, agent, "What is Go?")
 ```
 
 ### Custom providers
@@ -148,7 +163,7 @@ Auto-generated UUIDs are used when IDs are not provided.
 
 ## Hooks
 
-Add lifecycle callbacks to tool execution and turn control:
+Add lifecycle callbacks to tool execution:
 
 ```go
 session.Run(ctx, "Go", pithsdk.WithHooks(pithsdk.Hooks{
@@ -162,13 +177,12 @@ session.Run(ctx, "Go", pithsdk.WithHooks(pithsdk.Hooks{
         log.Printf("tool %s returned: %s", ctx.ToolName, ctx.Result)
         return nil, nil
     },
-    ShouldStopAfterTurn: func(ctx pithsdk.TurnContext) bool {
-        return ctx.TurnNumber >= 3 // stop after 3 turns
-    },
 }))
 ```
 
-Hooks apply to all SDK-created tools, including typed tools (`NewTool`), schema-driven tools (`NewDynamicTool`), and MCP-discovered tools from `mcp.Tools()`. `RawTool` is an advanced escape hatch for pre-built `loop.AgentTool` values: hooks and tracing IDs apply, but full `ToolContext` injection does not.
+Returning an error from a hook becomes tool-result text; the run continues.
+
+Hooks apply to all SDK-created tools, including typed tools (`NewTool`) and MCP-discovered tools from `mcp.Tools()`.
 
 ## MCP tools
 
@@ -193,9 +207,10 @@ allTools := append(localTools, mcpTools...)
 | `Client` | Gateway, credentials, defaults; creates sessions |
 | `Agent` | Specialist definition: instructions, model, tools |
 | `Session` | Runs the agent; holds multi-turn transcript |
-| `RunOnce` | One-shot run without managing a session |
 | `NewTool` | Typed tool with struct-based JSON Schema |
+| `mcp.Tools` | Discover tools from MCP servers |
 | `RegisterProvider` | Custom `ProviderPort` + model catalog |
+| `NewClientFromGateway` | Escape hatch for tests and custom setups |
 
 ## Installation
 
@@ -230,6 +245,8 @@ OPENAI_API_KEY="sk-..." go run ./examples/05-mcp/main.go
 **v0.1.0** — Core run path, tools, sessions, providers. See [CHANGELOG.md](CHANGELOG.md) for details.
 
 **v0.2.0** — Hooks, tracing IDs, `pithsdk/mcp`.
+
+**v0.3.0** — API trim before v1 lock. See [CHANGELOG.md](CHANGELOG.md) for migration notes.
 
 Future work is tracked in [plan.md](plan.md).
 

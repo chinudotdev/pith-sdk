@@ -1,9 +1,8 @@
 package pithsdk
 
-// Agent is a specialist definition: name, instructions, model, tools, and settings.
+// Agent is a specialist definition: instructions, model, tools, and settings.
 // Agents are immutable configuration; create a Session to run them.
 type Agent struct {
-	name         string
 	instructions string
 	model        string
 	tools        []Tool
@@ -12,8 +11,6 @@ type Agent struct {
 
 // AgentConfig configures a new Agent.
 type AgentConfig struct {
-	// Name is an optional display name for the agent.
-	Name string
 	// Instructions is the system prompt sent to the model.
 	Instructions string
 	// Model is a bare ID (e.g. "gpt-4o-mini") or provider/model (e.g. "anthropic/claude-...").
@@ -27,7 +24,6 @@ type AgentConfig struct {
 // NewAgent creates an agent definition.
 func NewAgent(cfg AgentConfig) (*Agent, error) {
 	return &Agent{
-		name:         cfg.Name,
 		instructions: cfg.Instructions,
 		model:        cfg.Model,
 		tools:        cfg.Tools,

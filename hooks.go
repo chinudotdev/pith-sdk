@@ -6,8 +6,6 @@ type BeforeToolContext struct {
 	RunID string
 	// SessionID is the unique identifier for the current session.
 	SessionID string
-	// AgentName is the name of the agent running this tool.
-	AgentName string
 	// ToolName is the name of the tool being called.
 	ToolName string
 	// CallID is the provider-assigned tool call identifier.
@@ -30,8 +28,6 @@ type AfterToolContext struct {
 	RunID string
 	// SessionID is the unique identifier for the current session.
 	SessionID string
-	// AgentName is the name of the agent running this tool.
-	AgentName string
 	// ToolName is the name of the tool that was called.
 	ToolName string
 	// CallID is the provider-assigned tool call identifier.
@@ -50,30 +46,19 @@ type AfterToolResult struct {
 	OverrideResult string
 }
 
-// TurnContext is passed to the ShouldStopAfterTurn hook.
-type TurnContext struct {
-	// RunID is the unique identifier for the current run.
-	RunID string
-	// SessionID is the unique identifier for the current session.
-	SessionID string
-	// AgentName is the name of the running agent.
-	AgentName string
-	// TurnNumber is the 1-based turn count within the current run.
-	TurnNumber int
-}
-
 // Hooks are lifecycle callbacks for a single Session.Run call.
 // All hooks are optional; nil hooks are skipped.
+//
+// Hook errors: returning an error from BeforeToolCall or AfterToolCall is converted
+// to tool-result text; the agent run continues with that text as the tool output.
 type Hooks struct {
 	// BeforeToolCall is called before each tool execution.
 	// Return a result with Block=true to prevent execution.
+	// Returning an error becomes tool-result text; the run continues.
 	BeforeToolCall func(ctx BeforeToolContext) (*BeforeToolResult, error)
 
 	// AfterToolCall is called after each tool execution.
 	// Use OverrideResult to replace the tool's output.
+	// Returning an error becomes tool-result text; the run continues.
 	AfterToolCall func(ctx AfterToolContext) (*AfterToolResult, error)
-
-	// ShouldStopAfterTurn is called after each agent turn.
-	// Return true to stop the run after this turn.
-	ShouldStopAfterTurn func(ctx TurnContext) bool
 }
