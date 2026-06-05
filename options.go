@@ -3,6 +3,13 @@ package pithsdk
 // RunOption configures a Session.Run call.
 type RunOption func(*RunOptions)
 
+// WithContext sets run-scoped local dependencies available as ToolContext.Local.
+func WithContext(local any) RunOption {
+	return func(o *RunOptions) {
+		o.Context = local
+	}
+}
+
 // WithInstructions overrides the agent's system prompt for this run only.
 func WithInstructions(instructions string) RunOption {
 	return func(o *RunOptions) {

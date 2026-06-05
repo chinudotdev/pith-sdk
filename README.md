@@ -42,6 +42,31 @@ func main() {
 }
 ```
 
+### With tools
+
+```go
+weather := pithsdk.NewTool("get_weather", "Return weather for a city.",
+    func(ctx pithsdk.ToolContext, args struct {
+        City string `json:"city"`
+    }) (string, error) {
+        return fmt.Sprintf("Sunny in %s", args.City), nil
+    },
+)
+
+agent, _ := pithsdk.NewAgent(pithsdk.AgentConfig{
+    Name:         "Weather bot",
+    Instructions: "You are a helpful weather bot.",
+    Model:        "gpt-4o-mini",
+    Tools:        []pithsdk.Tool{weather},
+})
+```
+
+Pass run-scoped dependencies to tools with `WithContext`:
+
+```go
+session.Run(ctx, "What's the weather?", pithsdk.WithContext(myDeps))
+```
+
 ## Installation
 
 ```bash
@@ -55,18 +80,19 @@ Requires Go 1.24+.
 | Example | Description |
 |---------|-------------|
 | [01-hello](examples/01-hello/) | Minimal agent run |
+| [02-tools](examples/02-tools/) | Agent with custom tools |
 
 Run from the repo root:
 
 ```bash
 OPENAI_API_KEY="sk-..." go run ./examples/01-hello/main.go
+OPENAI_API_KEY="sk-..." go run ./examples/02-tools/main.go
 ```
 
 ## Roadmap
 
 See [plan.md](plan.md) for the full implementation plan. Upcoming:
 
-- **Phase 2:** `NewTool[T]` and tool execution
 - **Phase 3:** Multi-turn sessions, streaming, `RunOnce`
 - **Phase 4:** `RegisterProvider` and custom providers
 
