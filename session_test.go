@@ -3,7 +3,9 @@ package pithsdk_test
 import (
 	"context"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/chinudotdev/pith/gateway"
 	pithsdk "github.com/chinudotdev/pith-sdk"
@@ -45,15 +47,25 @@ func TestConcurrentRunRejected(t *testing.T) {
 		t.Fatalf("NewSession: %v", err)
 	}
 
-	started := make(chan struct{})
-	done := make(chan struct{})
+	firstActive := make(chan struct{})
+	releaseFirst := make(chan struct{})
+	var once sync.Once
+
 	go func() {
-		close(started)
-		_, _ = session.Run(context.Background(), "First")
-		close(done)
+		_, _ = session.Run(context.Background(), "First", pithsdk.WithStream(func(c pithsdk.TextChunk) {
+			once.Do(func() {
+				close(firstActive)
+				<-releaseFirst
+			})
+		}))
 	}()
 
-	<-started
+	select {
+	case <-firstActive:
+	case <-time.After(2 * time.Second):
+		t.Fatal("first Run did not start in time")
+	}
+
 	_, err = session.Run(context.Background(), "Second")
 	if err == nil {
 		t.Fatal("expected error for concurrent Run")
@@ -62,7 +74,7 @@ func TestConcurrentRunRejected(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	<-done
+	close(releaseFirst)
 }
 
 func TestNewClientMissingAPIKeyDeferred(t *testing.T) {
