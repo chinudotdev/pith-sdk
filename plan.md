@@ -1,8 +1,8 @@
 # pith-sdk — Implementation Plan
 
-This document is the blueprint for **`github.com/chinudotdev/pith-sdk`**, a high-level Go SDK built on top of the stable [Pith](https://github.com/chinudotdev/pith) primitives.
+Blueprint for **`github.com/chinudotdev/pith-sdk`**, a minimal OpenAI Agents–style Go SDK on top of stable [Pith](https://github.com/chinudotdev/pith) primitives.
 
-Copy this file into the new repo root when you create it.
+**Related:** explicit exclusions live in [NON_GOALS.md](NON_GOALS.md).
 
 ---
 
@@ -10,78 +10,71 @@ Copy this file into the new repo root when you create it.
 
 ### What pith-sdk is
 
-A **minimal, OpenAI Agents-style SDK** for Go app developers:
+A **minimal agent SDK** for Go app developers:
 
 - Define an agent (name, instructions, model, tools)
 - Run it (`Session.Run` → get text back)
-- Register custom providers (e.g. Anthropic via `ProviderPort`)
-- No gateway wiring, no `ModelDescriptor`, no EventBus parsing
+- Register custom providers (`RegisterProvider`)
+- Compose MCP tools like any other tool
+- Observe runs via hooks and tracing IDs
+
+No gateway wiring, no `ModelDescriptor`, no EventBus parsing.
 
 ### What pith-sdk is not
 
-- Not a full agent framework (no graphs, Temporal, MCP, handoffs on v1)
-- Not a replacement for `pith` primitives — it wraps them
-- Not OpenAI-locked — provider-neutral by design
+See [NON_GOALS.md](NON_GOALS.md). In short: not a multi-agent framework, not a guardrails platform, not a tracing SaaS.
 
-### Success criteria for v1
+### Success criteria
 
-A developer can go from zero to a tool-calling agent in **~15 lines**, using either OpenAI-compat or a custom Anthropic provider, without importing `protocol`, `gateway`, or `loop` directly.
-
----
-
-## 2. Repository split
-
-| Repo | Module root | Audience | Change policy |
-|------|-------------|----------|---------------|
-| **`chinudotdev/pith`** | `github.com/chinudotdev/pith/{protocol,loop,gateway,agent}` | Library authors, provider implementers | Slow — bugs, security, intentional breaking changes only |
-| **`chinudotdev/pith-sdk`** | `github.com/chinudotdev/pith-sdk` | App developers | Fast — features, DX, examples, presets |
-
-### Dependency direction
-
-```
-App code
-  → pith-sdk
-    → pith/agent, pith/gateway, pith/loop, pith/protocol
-```
-
-**Never** the reverse. Primitives never import pith-sdk.
-
-### Version coupling
-
-```go
-// pith-sdk/go.mod (published)
-require (
-    github.com/chinudotdev/pith/agent    v0.1.x
-    github.com/chinudotdev/pith/gateway  v0.1.x
-    github.com/chinudotdev/pith/loop     v0.1.x
-    github.com/chinudotdev/pith/protocol v0.1.x
-)
-```
-
-- SDK patch/minor releases: no primitive changes required
-- Primitive breaking change (future v1): SDK pins old primitive version until migrated, then SDK major bump
-- Local dev: use `replace` in go.mod or a `go.work` spanning both repos (strip before release)
+| Milestone | Criteria |
+|-----------|----------|
+| **v0.1.0** ✅ | Zero → tool-calling agent in ~15 lines; OpenAI-compat or custom provider; no direct `protocol`/`gateway`/`loop` imports. |
+| **v0.2.0** ✅ | v0.1 + hooks + tracing IDs + `pithsdk/mcp`; public API frozen per [NON_GOALS.md §5](NON_GOALS.md#5-what-locked-means). |
 
 ---
 
-## 3. Positioning
+## 2. Current status
 
-### Comparable projects
+### Shipped — v0.1.0 (2026-06-05)
 
-| Project | Relationship |
-|---------|--------------|
-| [openai-agents-go](https://github.com/nlpodyssey/openai-agents-go) | Closest API shape — Go port of OpenAI Agents SDK |
-| [Gollem](https://github.com/fugue-labs/gollem) | Typed tools + multi-provider — more features, monolithic |
-| [Genkit Go](https://github.com/genkit-ai/genkit/tree/main/go) | Good DX — heavier platform (CLI, Firebase) |
-| [langchaingo](https://github.com/tmc/langchaingo) | Chains/executors — older pattern |
-| [agent-sdk-go](https://github.com/agenticenv/agent-sdk-go) | Production SDK — Temporal-required |
+- [x] `Client`, `Agent`, `Session`, `RunOnce`
+- [x] Built-in OpenAI-compatible provider (`NewClient`)
+- [x] `RegisterProvider`, `ModelPreset`, `provider/model` resolution
+- [x] `NewTool[T]` with struct-based JSON Schema
+- [x] `ToolContext.Local` via `WithContext`
+- [x] Multi-turn: `Session.Messages()`, `Session.Reset()`
+- [x] `WithStream`, `WithMaxTurns`, `WithInstructions`
+- [x] `NewClientFromGateway`, `RawTool` escape hatches
+- [x] Examples: hello, tools, multi-turn, anthropic provider
+- [x] CI: vet + test (FauxProvider, no live API keys)
 
-### pith-sdk differentiator
+### Shipped — v0.2.0 (2026-06-05)
 
-1. **Smallest API surface** — Agent, Session, Run, Tool only on v1
-2. **Separate stable primitive core** — drop to `pith/*` when needed
-3. **First-class custom providers** — `RegisterProvider` + `gateway.ProviderPort` (see pith example 11)
-4. **Provider-neutral defaults** — OpenAI-compat, Groq, Ollama via BaseURL; not OpenAI Responses-first
+- [x] Hooks (`WithHooks`)
+- [x] Tracing IDs (`SessionID`, `RunID`, `CallID`, `ToolName`)
+- [x] `pithsdk/mcp` — `mcp.Tools()` → `[]pithsdk.Tool`
+- [x] `NewDynamicTool` (public; backs MCP adapter)
+- [x] README + godoc sync for all public symbols
+- [x] [NON_GOALS.md](NON_GOALS.md) published and linked
+
+### Conditional — when `pith` supports it
+
+- [ ] **Structured output** — expose `output_type` / typed `RunResult` only after `protocol` + gateway + providers support response schema constraints. No SDK shim. See [NON_GOALS.md §3](NON_GOALS.md#3-blocked-on-primitives-not-sdk-decisions-alone).
+
+---
+
+## 3. Repository split
+
+| Repo | Module | Audience | Change policy |
+|------|--------|----------|---------------|
+| **`chinudotdev/pith`** | `github.com/chinudotdev/pith/{protocol,loop,gateway,agent}` | Library authors, provider implementers | Slow |
+| **`chinudotdev/pith-sdk`** | `github.com/chinudotdev/pith-sdk` | App developers | Fast (pre-v1); patch/minor only (post-v1 lock) |
+
+```
+App code → pith-sdk → pith/{agent,gateway,loop,protocol}
+```
+
+Primitives never import pith-sdk.
 
 ---
 
@@ -95,6 +88,8 @@ require (
 ┌─────────────────▼───────────────────────┐
 │  pith-sdk                               │
 │  Client · Agent · Session · Tool · Run  │
+│  Hooks · Tracing IDs                    │
+│  pithsdk/mcp (tool adapter)             │
 └─────────────────┬───────────────────────┘
                   │
 ┌─────────────────▼───────────────────────┐
@@ -103,441 +98,317 @@ require (
 └─────────────────┬───────────────────────┘
                   │
 ┌─────────────────▼───────────────────────┐
-│  pith/loop + pith/protocol            │
+│  pith/loop + pith/protocol              │
 └─────────────────────────────────────────┘
 ```
 
-### Internal wiring (SDK owns this)
+### Tool call flow (local + MCP)
 
-On `Client` creation / `RegisterProvider`:
+```
+User → Session.Run → tool loop → tool call
+                                    ├─ Local Tool  (NewTool handler)
+                                    └─ MCP Tool    (handler → MCP server)
+```
 
-1. Create `gateway.LLMGateway`
-2. Register built-in OpenAI-compat provider (default)
-3. Register custom providers via `RegisterProvider`
-4. Wire credentials per provider
-5. Register models from `ModelPreset` → internal `ModelDescriptor`
-6. On `Session.Run`: call `agent.Prompt` with pre-built `StreamFn`
-
-App developers never write `StreamFn`, `CredentialProviderFunc`, or `Catalog.Register` by hand.
-
----
-
-## 5. Public API (v1)
+MCP needs no new primitives — it is a tool source factory.
 
 ### Design rules (API stability)
 
-1. **`Agent` stays small** — only specialist identity (name, instructions, model, tools, settings)
-2. **Run behavior on `Session` / `RunOptions`** — not on Agent
+1. **`Agent` stays small** — identity only: name, instructions, model, tools, settings
+2. **Run behavior on `Session` / `RunOption`** — stream, max turns, hooks, IDs
 3. **Infrastructure on `Client`** — keys, providers, defaults
-4. **String model IDs only** — never expose `ModelDescriptor` in public SDK docs
-5. **One multi-turn path** — `Session` (not ambiguous history params on day one)
-6. **Escape hatch** — `NewClientFromGateway(gw *gateway.LLMGateway)` for power users
+4. **String model IDs only** — never expose `ModelDescriptor` in public docs
+5. **One multi-turn path** — `Session`
+6. **Escape hatch** — `NewClientFromGateway`, `RawTool`, drop to `pith/*`
+7. **MCP is composition** — `append(localTools, mcpTools...)`; no MCP on `AgentConfig`
 
 ---
 
-### 5.1 Client
+## 5. Public API
+
+### 5.1 Shipped (v0.1.0)
 
 ```go
-package pithsdk
+// Client
+NewClient(cfg ClientConfig) (*Client, error)
+NewClientFromGateway(gw *gateway.LLMGateway) *Client
+(c *Client) RegisterProvider(reg ProviderRegistration) error
+(c *Client) NewSession(agent *Agent) (*Session, error)
+(c *Client) RunOnce(ctx, agent, input, opts ...RunOption) (*RunResult, error)
 
-type Client struct { /* ... */ }
+// Agent
+NewAgent(cfg AgentConfig) (*Agent, error)
 
-type ClientConfig struct {
-    APIKey          string         // explicit key for default provider
-    DefaultProvider string         // "openai" (default)
-    DefaultModel    string         // fallback if Agent.Model is empty, e.g. "gpt-4o-mini"
-    DefaultSettings *ModelSettings
-}
+// Tool
+NewTool[T](name, desc string, fn func(ToolContext, T) (string, error)) Tool
+RawTool(t loop.AgentTool) Tool
 
-func NewClient(cfg ClientConfig) (*Client, error)
+// Session
+(s *Session) Run(ctx, input, opts ...RunOption) (*RunResult, error)
+(s *Session) Messages() []MessageSummary
+(s *Session) Reset()
 
-// Advanced: pre-wired gateway (e.g. existing example 11 setup)
-func NewClientFromGateway(gw *gateway.LLMGateway) *Client
-
-func (c *Client) RegisterProvider(reg ProviderRegistration) error
-func (c *Client) NewSession(agent *Agent) *Session
+// Run options
+WithContext(local any) RunOption
+WithInstructions(instructions string) RunOption
+WithStream(fn func(TextChunk)) RunOption
+WithMaxTurns(n int) RunOption
 ```
 
----
+### 5.2 Shipped (v0.2.0)
 
-### 5.2 Agent (definition only)
+#### Tracing IDs
 
 ```go
-type Agent struct { /* opaque */ }
+// Session
+WithSessionID(id string) SessionOption   // auto UUID if omitted
+(s *Session) ID() string
 
-type AgentConfig struct {
-    Name         string
-    Instructions string
-    Model        string         // "gpt-4o-mini" or "anthropic/claude-sonnet-4-20250514"
-    Tools        []Tool
-    Settings     *ModelSettings // optional
-}
+// Run
+WithRunID(id string) RunOption           // auto UUID per Run if omitted
 
-func NewAgent(cfg AgentConfig) (*Agent, error)
-```
-
-| Field | v1 | Notes |
-|-------|-----|-------|
-| `Name` | Yes | Traces, logs, future handoffs |
-| `Instructions` | Yes | Static system prompt |
-| `Model` | Yes | Provider/model shorthand — single selector, no separate Provider field |
-| `Tools` | Yes | From `NewTool[T]` |
-| `Settings` | Yes | Temperature, max tokens only |
-
-**Do not put on Agent:** APIKey, StreamFn, Provider, handoffs, guardrails, MCP, output schema.
-
----
-
-### 5.3 ModelSettings
-
-```go
-type ModelSettings struct {
-    Temperature *float64
-    MaxTokens   *int
-}
-```
-
-Defer: thinking/reasoning, transport, parallel tool calls, full capabilities maps.
-
----
-
-### 5.4 Model string convention
-
-| String | Resolves to |
-|--------|-------------|
-| `"gpt-4o-mini"` | `DefaultProvider` (openai compat) + model ID |
-| `"groq/llama-3.3-70b"` | Provider `groq` + model ID |
-| `"anthropic/claude-sonnet-4-20250514"` | Registered custom provider + model ID |
-| `"ollama/llama3"` | Provider `ollama` + model ID |
-
-Format: `"<provider>/<model-id>"` when not using default provider.
-
-Clear errors when provider or model is missing:
-
-```
-unknown model "anthropic/claude-foo": provider "anthropic" registered but model not found
-```
-
----
-
-### 5.5 Tool
-
-```go
-type Tool struct { /* opaque */ }
-
-type ToolContext struct {
-    Run    context.Context // cancellation
-    Local  any             // from RunOptions.Context — NOT sent to model
-    CallID string
-}
-
-func NewTool[T any](
-    name string,
-    description string,
-    fn func(ToolContext, T) (string, error),
-) Tool
-
-// Advanced escape hatch
-func RawTool(t loop.AgentTool) Tool
-```
-
-- v1: struct tags (`json`, optional `desc`) → JSON Schema generation
-- Defer on Tool: needsApproval, guardrails, timeoutMs, deferLoading
-
----
-
-### 5.6 Session + Run
-
-```go
-type Session struct { /* wraps pith agent + transcript */ }
-
-func (s *Session) Run(ctx context.Context, input string, opts ...RunOption) (*RunResult, error)
-func (s *Session) Messages() []MessageSummary
-func (s *Session) Reset()
-```
-
-```go
-type RunOptions struct {
-    Context      any                        // local app context → ToolContext.Local
-    Stream       func(chunk TextChunk)      // nil = blocking
-    MaxTurns     int                        // default 10
-    Instructions string                     // one-off override
-}
-
+// RunResult
 type RunResult struct {
-    Text     string              // OpenAI: finalOutput
+    RunID    string
+    Text     string
     Messages []MessageSummary
     Usage    *UsageSummary
 }
+
+// ToolContext (expanded)
+type ToolContext struct {
+    Run       context.Context
+    RunID     string
+    SessionID string
+    Local     any
+    ToolName  string
+    CallID    string
+}
 ```
 
+ID semantics:
+
+| ID | Scope | Purpose |
+|----|-------|---------|
+| `SessionID` | Conversation | Thread / conversation correlation |
+| `RunID` | Single `Run()` | One user turn + agent response cycle |
+| `CallID` | Tool invocation | Provider-assigned tool call ID |
+| `ToolName` | Tool invocation | Human-readable tool name (local or MCP) |
+
+#### Hooks
+
 ```go
-// Optional sugar for scripts (stateless single shot)
-func (c *Client) RunOnce(ctx context.Context, agent *Agent, input string, opts ...RunOption) (*RunResult, error)
+type Hooks struct {
+    BeforeToolCall      func(BeforeToolContext) (*BeforeToolResult, error)
+    AfterToolCall       func(AfterToolContext) (*AfterToolResult, error)
+    ShouldStopAfterTurn func(TurnContext) bool
+}
+
+WithHooks(h Hooks) RunOption
+```
+
+Hook context types carry `RunID`, `SessionID`, `AgentName`, `ToolName`, `CallID`, and tool args.
+
+Use cases: HITL approval, logging/metrics, output redaction, `stop_on_first_tool` via `ShouldStopAfterTurn`.
+
+#### MCP subpackage
+
+```go
+// github.com/chinudotdev/pith-sdk/mcp
+type Config struct {
+    Command string
+    Args    []string
+    Env     []string
+    // URL (remote transport) — deferred; stdio via Command is supported today.
+}
+
+func Tools(ctx context.Context, cfg Config) (tools []pithsdk.Tool, close func() error, err error)
+```
+
+`NewDynamicTool` generates schema-driven tools from JSON Schema maps (used by the MCP adapter).
+
+### 5.3 Conditional (primitive-gated)
+
+```go
+// Future — only when pith protocol/gateway supports response schema
+type AgentConfig struct {
+    // ...
+    OutputType OutputSchema // TBD — shape follows pith primitive API
+}
+```
+
+Do not design or ship until `chinudotdev/pith` adds structured output support.
+
+---
+
+## 6. Implementation phases
+
+### Phase 0–4 — Complete ✅
+
+Bootstrap, core run path, tools, multi-turn/streaming, custom providers. See [CHANGELOG.md](CHANGELOG.md).
+
+### Phase 5 — v0.2.0 (complete)
+
+| Step | Deliverable |
+|------|-------------|
+| 5a | `WithSessionID`, `Session.ID()`, `WithRunID`, `RunResult.RunID`, expand `ToolContext` |
+| 5b | `WithHooks` + hook context types; wire to `loop.LoopHooks` |
+| 5c | `NewDynamicTool`; `pithsdk/mcp` package + example |
+| 5d | Wire `Agent.Name` into hook/tracing context |
+| 5e | README, godoc, [NON_GOALS.md](NON_GOALS.md); tag **v0.2.0** |
+
+**Exit criteria:** Integration tests for hooks, IDs, and MCP (stdio mock); no new core types beyond plan; API matches §5.2.
+
+### Phase 6 — Post-lock (patch/minor only)
+
+- Provider preset examples (Groq, Ollama)
+- Optional thin exposures if demand is clear: `WithImages`, `Session.Steer` / `FollowUp` (primitives exist — see [NON_GOALS.md §4](NON_GOALS.md#4-evaluated-and-deferred-sdk-could-expose-but-we-choose-not-to))
+- Structured output SDK exposure — **only after pith ships it**
+
+---
+
+## 7. OpenAI Agents SDK comparison
+
+| OpenAI | pith-sdk v1 | Policy |
+|--------|-------------|--------|
+| Agent, Runner, Tools | Agent, Session, NewTool | ✅ Keep |
+| Sessions, streaming | Session, WithStream | ✅ Keep |
+| Context DI | WithContext | ✅ Keep |
+| MCP | mcp.Tools() composed | ✅ Keep |
+| Tool hooks | WithHooks | ✅ Keep |
+| Tracing | IDs + hooks (DIY) | ✅ Keep |
+| Handoffs | — | ⏭ [§8 evaluation](#8-feature-evaluation-handoffs) |
+| Guardrails | — | ⏭ [NON_GOALS.md](NON_GOALS.md) |
+| Structured output | — | ⏳ When primitive supports |
+| tool_choice | — | ⏭ [§8 evaluation](#8-feature-evaluation-tool_choice) |
+
+---
+
+## 8. Feature evaluation
+
+### tool_choice
+
+**What it is:** Force the model to call a specific tool, require any tool, or forbid tools (`auto` / `required` / `none` / named tool).
+
+**Current state:** Not in `pith` protocol, gateway, or providers.
+
+#### Is it needed for pith-sdk v1?
+
+**No — defer.**
+
+| For | Against |
+|-----|---------|
+| Niche flows: guaranteed tool invocation, pipeline steps that must call an API | Not in primitives — SDK cannot ship without upstream work |
+| OpenAI SDK parity | Most apps work with good tool descriptions + instructions |
+| | `BeforeToolCall` hook can block wrong tools (HITL-style) |
+| | Forcing tools via prompt is unreliable but often sufficient |
+| | Adds `ModelSettings` complexity across providers with inconsistent support |
+
+**Recommendation:** Do not add to SDK roadmap until `pith` adds provider-level `tool_choice`. Document workaround: strong instructions + tool naming. Revisit if extraction/ETL use cases demand it.
+
+**Workarounds today:**
+
+```go
+// Instruction-based (good enough for most cases)
+Instructions: "You must call get_weather before answering."
+
+// Hook-based gate
+BeforeToolCall: func(h BeforeToolContext) (*BeforeToolResult, error) {
+    if h.ToolName != "get_weather" {
+        return &BeforeToolResult{Block: true, Reason: "only get_weather allowed"}, nil
+    }
+    return nil, nil
+}
 ```
 
 ---
 
-### 5.7 Custom provider registration
+### Real handoffs
 
-Provider authors implement `gateway.ProviderPort` (see pith `examples/11-custom-provider`).
+**What it is:** Agent A delegates the conversation to Agent B; B inherits history, system prompt, tools, and run scope; framework tracks active agent and emits `on_handoff`.
 
-SDK users register once on Client:
+**Current state:** No handoff primitive in `pith`. Composable only via hacks (tool that calls another session).
 
-```go
-type ProviderRegistration struct {
-    Provider gateway.ProviderPort
+#### Is it needed for pith-sdk v1?
 
-    // Credentials — one of:
-    APIKey     string
-    APIKeyEnv  string                              // e.g. "ANTHROPIC_API_KEY"
-    Credential func(providerID string) (string, error)
+**No — exclude from SDK; optional future orchestrator package.**
 
-    Models []ModelPreset
-}
+| For | Against |
+|-----|---------|
+| OpenAI SDK parity | Conflicts with “smallest API surface” positioning |
+| Triage → specialist routing | Manager-as-tool pattern covers 80% without framework support |
+| | Requires new types (`Orchestrator`, handoff graph, run scope across agents) |
+| | Hooks scope becomes ambiguous (which agent’s hooks fire?) |
+| | Most pith-sdk users want single-agent apps in ~15 lines |
 
-type ModelPreset struct {
-    ID            string // "claude-sonnet-4-20250514"
-    Name          string // optional display name
-    ContextWindow int    // 0 = SDK default
-    MaxTokens     int    // 0 = SDK default
-}
-```
+**Recommendation:** Keep handoffs out of root `pithsdk`. If demand grows, ship `pith-sdk/orchestrator` or document patterns in examples — never inflate `AgentConfig`.
 
-Usage:
+**Workarounds today:**
 
 ```go
-client.RegisterProvider(pithsdk.ProviderRegistration{
-    Provider:  anthropic.New(anthropic.Config{}),
-    APIKeyEnv: "ANTHROPIC_API_KEY",
-    Models: []pithsdk.ModelPreset{
-        {ID: "claude-sonnet-4-20250514", ContextWindow: 200_000, MaxTokens: 8192},
+// Manager-as-tool: specialist agent inside a tool handler
+billingTool := pithsdk.NewTool("billing_expert", "Handles billing questions.",
+    func(tc pithsdk.ToolContext, args struct{ Query string `json:"query"` }) (string, error) {
+        result, err := client.RunOnce(tc.Run, billingAgent, args.Query)
+        if err != nil {
+            return "", err
+        }
+        return result.Text, nil
     },
-})
-
-agent, _ := pithsdk.NewAgent(pithsdk.AgentConfig{
-    Model: "anthropic/claude-sonnet-4-20250514",
-    // ... same Agent API as OpenAI
-})
-```
-
-SDK internally: register provider → wire credentials → build ModelDescriptors → done.
-
----
-
-## 6. v1 scope — include vs defer
-
-### Include in v1
-
-- [ ] `Client`, `Agent`, `Session`, `Run`, `RunOnce`
-- [ ] Built-in OpenAI-compat provider (auto on `NewClient`)
-- [ ] `RegisterProvider` for custom providers
-- [ ] `NewTool[T]` with struct-based schema
-- [ ] `ToolContext.Local` for run-scoped deps
-- [ ] Model string shorthand + `ModelPreset`
-- [ ] Env-based credentials (`APIKey`, `APIKeyEnv`)
-- [ ] `RunOptions`: stream callback, maxTurns, local context, instructions override
-- [ ] `RunResult.Text` + simplified message/usage summaries
-- [ ] `Session.Reset()`, `Session.Messages()`
-- [ ] `NewClientFromGateway` escape hatch
-- [ ] Examples: hello, tools, multi-turn, custom anthropic provider
-- [ ] CI: vet + test (no live API keys required for unit tests)
-
-### Defer to v2+
-
-| Feature | Notes |
-|---------|-------|
-| Handoffs / multi-agent | New type (`Orchestrator`) — don't add to Agent |
-| Structured output (`outputType`) | Pick schema approach first |
-| Dynamic instructions callback | `RunOptions.InstructionsFunc` |
-| Guardrails / HITL / approvals | Hooks exist in primitives |
-| MCP servers | Integration surface still evolving |
-| Built-in tools (bash, read_file) | Optional; start with custom tools only |
-| Compaction helper | `Session.CompactIfNeeded()` — primitive exists |
-| Tracing / observability | Separate concern |
-| Hosted platform tools | OpenAI-specific |
-| Provider preset packages | `pith-sdk/providers/anthropic` when maintained |
-| `client.Use(bundle)` sugar | After first-party provider packages exist |
-
----
-
-## 7. Target hello worlds
-
-### OpenAI (default)
-
-```go
-package main
-
-import (
-    "context"
-    "fmt"
-    "os"
-
-    "github.com/chinudotdev/pith-sdk"
 )
-
-func main() {
-    client, _ := pithsdk.NewClient(pithsdk.ClientConfig{
-        APIKey: os.Getenv("OPENAI_API_KEY"),
-    })
-
-    agent, _ := pithsdk.NewAgent(pithsdk.AgentConfig{
-        Name:         "Assistant",
-        Instructions: "You are helpful. Be concise.",
-        Model:        "gpt-4o-mini",
-    })
-
-    result, _ := client.NewSession(agent).Run(context.Background(), "What is Go?")
-    fmt.Println(result.Text)
-}
 ```
 
-### With tools
-
-```go
-weather := pithsdk.NewTool("get_weather", "Return weather for a city.",
-    func(ctx pithsdk.ToolContext, args struct {
-        City string `json:"city"`
-    }) (string, error) {
-        return fmt.Sprintf("Sunny in %s", args.City), nil
-    },
-)
-
-agent, _ := pithsdk.NewAgent(pithsdk.AgentConfig{
-    Name:         "Weather bot",
-    Instructions: "You are a helpful weather bot.",
-    Model:        "gpt-4o-mini",
-    Tools:        []pithsdk.Tool{weather},
-})
-```
-
-### Custom Anthropic provider
-
-```go
-client, _ := pithsdk.NewClient(pithsdk.ClientConfig{})
-
-client.RegisterProvider(pithsdk.ProviderRegistration{
-    Provider:  myanthropic.New(myanthropic.Config{}),
-    APIKeyEnv: "ANTHROPIC_API_KEY",
-    Models: []pithsdk.ModelPreset{
-        {ID: "claude-sonnet-4-20250514", ContextWindow: 200_000, MaxTokens: 8192},
-    },
-})
-
-agent, _ := pithsdk.NewAgent(pithsdk.AgentConfig{
-    Name:         "Assistant",
-    Instructions: "You are helpful.",
-    Model:        "anthropic/claude-sonnet-4-20250514",
-})
-```
+This is not a true handoff (separate transcript, no `on_handoff`), but sufficient for many routing tasks.
 
 ---
 
-## 8. New repo structure
+### Structured output
+
+**What it is:** Agent returns a typed struct (e.g. `CalendarEvent`) instead of plain text.
+
+**Current state:** Not in `pith`.
+
+**Policy:** **Add to SDK when primitive supports it.** Do not shim JSON parsing in the SDK. Track as upstream work in `chinudotdev/pith`; then expose via `AgentConfig` or `RunOption` matching the primitive API shape.
+
+---
+
+## 9. Repository structure
 
 ```
 pith-sdk/
-├── plan.md                 # this file
-├── README.md               # app developer focused; link to pith for primitives
-├── LICENSE                 # same as pith (MIT)
-├── go.mod                  # module github.com/chinudotdev/pith-sdk
-├── go.sum
-├── .github/
-│   └── workflows/
-│       └── ci.yml          # go vet + go test
-├── client.go               # Client, ClientConfig, NewClient
-├── agent.go                # Agent, AgentConfig, NewAgent
-├── session.go              # Session, Run, RunOnce
-├── tool.go                 # Tool, NewTool, ToolContext, RawTool
-├── provider.go             # ProviderRegistration, ModelPreset, RegisterProvider
-├── model.go                # ModelSettings, model string resolution
-├── result.go               # RunResult, MessageSummary, UsageSummary, RunOptions
-├── options.go              # RunOption functional options
-├── defaults.go             # built-in openai provider + default model presets
-├── gateway.go              # internal gateway wiring (or internal/ package)
+├── plan.md
+├── NON_GOALS.md
+├── README.md
+├── CHANGELOG.md
+├── client.go
+├── agent.go
+├── session.go
+├── tool.go
+├── hooks.go              # Phase 5b
+├── tracing.go            # Phase 5a (or merged into session/result)
+├── provider.go
+├── model.go
+├── result.go
+├── options.go
+├── defaults.go
+├── credentials.go
+├── mcp/
+│   └── mcp.go            # Phase 5c
 ├── internal/
-│   ├── resolve/            # model string → ModelDescriptor
-│   ├── schema/             # struct tags → JSON Schema
-│   └── wire/               # StreamFn, agent.NewAgent wiring
-├── client_test.go
-├── session_test.go
-├── tool_test.go
-├── integration_test.go     # uses gateway.FauxProvider — no API keys
-└── examples/
-    ├── 01-hello/
-    ├── 02-tools/
-    ├── 03-multi-turn/
-    └── 04-anthropic-provider/
+│   ├── resolve/
+│   ├── schema/
+│   ├── dynamic_tool.go   # Phase 5c (internal)
+│   ├── stream/
+│   ├── summary/
+│   └── wire/
+├── examples/
+│   ├── 01-hello/
+│   ├── 02-tools/
+│   ├── 03-multi-turn/
+│   ├── 04-anthropic-provider/
+│   └── 05-mcp/           # Phase 5c
+└── .github/workflows/ci.yml
 ```
-
-### Package name
-
-- Module: `github.com/chinudotdev/pith-sdk`
-- Package: `pithsdk` (avoids generic `sdk` in consumer code)
-
-```go
-import "github.com/chinudotdev/pith-sdk"
-// usage: pithsdk.NewClient(...)
-```
-
-Or root package `sdk` with import alias — pick one and document in README.
-
----
-
-## 9. Implementation phases
-
-### Phase 0 — Repo bootstrap (day 1)
-
-- [ ] Create `github.com/chinudotdev/pith-sdk` repo
-- [ ] Copy this plan.md
-- [ ] `go mod init github.com/chinudotdev/pith-sdk`
-- [ ] Add pith primitive dependencies
-- [ ] CI workflow (vet + test)
-- [ ] README with positioning + link to pith
-
-### Phase 1 — Core run path (MVP)
-
-- [ ] `Client` with built-in OpenAI-compat + env API key
-- [ ] `Agent` definition
-- [ ] Internal gateway + StreamFn wiring
-- [ ] `Session.Run` → blocking text result
-- [ ] Default model preset for `gpt-4o-mini`
-- [ ] Example `01-hello`
-- [ ] Integration test with `gateway.FauxProvider`
-
-**Exit criteria:** `Session.Run` returns text without manual EventBus subscription.
-
-### Phase 2 — Tools
-
-- [ ] `NewTool[T]` with struct → JSON Schema
-- [ ] `ToolContext` with Local context from RunOptions
-- [ ] Tool execution loop works end-to-end
-- [ ] Example `02-tools`
-- [ ] Tests: tool called, result in transcript
-
-### Phase 3 — Multi-turn + streaming
-
-- [ ] `Session` holds transcript across runs
-- [ ] `Session.Reset()`, `Session.Messages()`
-- [ ] `RunOptions.Stream` callback
-- [ ] Example `03-multi-turn`
-- [ ] `RunOnce` sugar
-
-### Phase 4 — Custom providers
-
-- [ ] `RegisterProvider` + `ModelPreset`
-- [ ] Model string resolution (`provider/model`)
-- [ ] Credential wiring per provider
-- [ ] Example `04-anthropic-provider` (port from pith example 11)
-- [ ] `NewClientFromGateway` escape hatch
-
-### Phase 5 — Polish + release
-
-- [ ] Error messages (missing API key, unknown model)
-- [ ] godoc on all public types
-- [ ] CHANGELOG
-- [ ] Tag `v0.1.0`
-- [ ] Update pith README: "Getting started → pith-sdk"
 
 ---
 
@@ -545,103 +416,38 @@ Or root package `sdk` with import alias — pick one and document in README.
 
 ### Unit tests (no network)
 
-- Model string parsing (`gpt-4o-mini`, `anthropic/claude-...`)
-- Schema generation from struct tags
-- Client/provider registration
+- Model string resolution
+- JSON Schema from struct tags
+- Hook wiring, ID propagation
+- MCP schema → dynamic tool mapping (mock server)
 
-### Integration tests (FauxProvider)
+### Integration tests (FauxProvider / mock MCP)
 
-Use `gateway.NewFauxProvider` + `gateway.FauxModel()` like pith's `agent/integration_test.go`:
+- Run returns text; tools execute; multi-turn accumulates
+- Hooks: block tool, override result, stop after turn
+- `RunID` / `SessionID` present on result and `ToolContext`
+- MCP tools discovered and invoked end-to-end (stdio mock)
 
-- Run returns expected text
-- Tool execution produces tool result in transcript
-- Multi-turn session accumulates messages
-- Custom provider registration routes to correct provider
-
-### Manual smoke tests (optional, local)
-
-- `OPENAI_API_KEY=... go run examples/01-hello/main.go`
-- Anthropic example with real key
-
-Do **not** require API keys in CI.
+Do **not** require live API keys or external MCP servers in CI.
 
 ---
 
-## 11. Cross-repo maintenance
+## 11. Version roadmap
 
-### pith repo (`chinudotdev/pith`)
-
-- Add to README top: "Build agents quickly → [pith-sdk](https://github.com/chinudotdev/pith-sdk)"
-- Keep examples 01–11 as "under the hood" primitive docs
-- CONTRIBUTING: feature requests for app DX → pith-sdk; primitive gaps → discuss in pith issues first
-
-### pith-sdk repo
-
-- Issues: SDK bugs, DX, examples, presets
-- Never modify pith primitives from pith-sdk PRs — open upstream issue instead
-- Changelog tracks SDK-only changes
-
-### Local dev (both repos cloned)
-
-```bash
-# ~/dev/pith
-# ~/dev/pith-sdk
-
-# pith-sdk/go.mod (dev only — remove before release)
-replace (
-    github.com/chinudotdev/pith/agent    => ../pith/agent
-    github.com/chinudotdev/pith/gateway  => ../pith/gateway
-    github.com/chinudotdev/pith/loop     => ../pith/loop
-    github.com/chinudotdev/pith/protocol => ../pith/protocol
-)
-```
+| Version | Contents |
+|---------|----------|
+| **v0.1.0** ✅ | Core run path, tools, sessions, providers |
+| **v0.2.0** ✅ | Hooks, tracing IDs, `pithsdk/mcp`, API lock |
+| **v1.x** | Bugfixes, docs, examples, optional thin primitive exposures |
+| **v2.0** | Only if intentional breaking API change |
+| **TBD** | Structured output — when `pith` supports it |
+| **Unlikely** | `tool_choice`, handoffs in root package — see §8 |
 
 ---
 
-## 12. Open decisions (resolve before or during Phase 1)
-
-| Decision | Recommendation | Decide by |
-|----------|----------------|-----------|
-| Package name | `pithsdk` | Phase 0 |
-| Session vs stateless Run as default | `Session` default; `RunOnce` for scripts | Phase 1 |
-| Built-in provider presets | OpenAI only in v1; groq/ollama via RegisterProvider docs | Phase 4 |
-| Struct tag convention | `json` + optional `desc:"..."` | Phase 2 |
-| MessageSummary shape | `{Role, Text}` simplified — not protocol.Message | Phase 1 |
-| Generic import path alias | Document `pithsdk "github.com/chinudotdev/pith-sdk"` | Phase 0 |
-
----
-
-## 13. Non-goals (explicit)
-
-- Competing with Eino, Genkit, or Google ADK on features
-- Shipping Temporal/durable execution
-- Shipping MCP, handoffs, guardrails in v1
-- Moving primitive code into pith-sdk
-- Monorepo with pith (separate repos permanently)
-
----
-
-## 14. References
+## 12. References
 
 - Pith primitives: https://github.com/chinudotdev/pith
-- Pith custom provider example: `examples/11-custom-provider/main.go`
-- OpenAI Agents SDK (API north star): https://developers.openai.com/api/docs/guides/agents
-- OpenAI Agents JS quickstart: https://openai.github.io/openai-agents-js/guides/quickstart/
-- OpenAI agent definitions: https://developers.openai.com/api/docs/guides/agents (Agent properties table)
-
----
-
-## 15. Checklist — copy to new repo and start
-
-```
-[ ] Create github.com/chinudotdev/pith-sdk
-[ ] go mod init github.com/chinudotdev/pith-sdk
-[ ] Copy plan.md + write README
-[ ] Add CI
-[ ] Phase 1: Client + Agent + Session.Run
-[ ] Phase 2: NewTool[T]
-[ ] Phase 3: multi-turn + streaming
-[ ] Phase 4: RegisterProvider + anthropic example
-[ ] Tag v0.1.0
-[ ] Link from pith README
-```
+- Non-goals: [NON_GOALS.md](NON_GOALS.md)
+- OpenAI Agents SDK: https://openai.github.io/openai-agents-python/agents/
+- Pith custom provider: `pith/examples/11-custom-provider/`

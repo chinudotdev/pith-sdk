@@ -1,4 +1,5 @@
 # Binaries
+/05-mcp
 bin/
 *.exe
 *.exe~
