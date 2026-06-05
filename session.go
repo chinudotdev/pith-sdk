@@ -4,10 +4,11 @@ import (
 	"context"
 	"crypto/rand"
 	"fmt"
+	"sync"
 
 	pithagent "github.com/chinudotdev/pith/agent"
 	"github.com/chinudotdev/pith/loop"
-	"github.com/chinudotdev/pith-sdk/internal/stream"
+	"github.com/chinudotdev/pith/protocol"
 	"github.com/chinudotdev/pith-sdk/internal/summary"
 	"github.com/chinudotdev/pith-sdk/internal/wire"
 )
@@ -26,10 +27,11 @@ func newUUID() string {
 
 // Session runs an agent and holds its transcript across multiple Run calls.
 type Session struct {
-	id        string
-	agentName string
-	ag        *pithagent.Agent
-	scope     *wire.RunScopeHolder
+	id      string
+	ag      *pithagent.Agent
+	scope   *wire.RunScopeHolder
+	runMu   sync.Mutex
+	running bool
 }
 
 // ID returns the session identifier, unique per conversation.
@@ -40,7 +42,7 @@ func (s *Session) ID() string {
 // Messages returns the current session transcript.
 func (s *Session) Messages() []MessageSummary {
 	state := s.ag.State()
-	return toPublicSummaries(summary.ToSummaries(state.Messages))
+	return summary.ToSummaries(state.Messages)
 }
 
 // Reset clears the session transcript and queued messages.
@@ -52,10 +54,20 @@ func (s *Session) Reset() {
 //
 // Concurrent Run calls on the same Session are not supported; serialize calls
 // or use separate sessions.
-//
-// When ShouldStopAfterTurn returns true, Run stops gracefully and returns nil
-// error along with partial results accumulated so far.
 func (s *Session) Run(ctx context.Context, input string, opts ...RunOption) (*RunResult, error) {
+	s.runMu.Lock()
+	if s.running {
+		s.runMu.Unlock()
+		return nil, fmt.Errorf("pithsdk: concurrent Session.Run is not supported")
+	}
+	s.running = true
+	s.runMu.Unlock()
+	defer func() {
+		s.runMu.Lock()
+		s.running = false
+		s.runMu.Unlock()
+	}()
+
 	ro := applyRunOptions(opts)
 
 	runID := ro.RunID
@@ -71,7 +83,7 @@ func (s *Session) Run(ctx context.Context, input string, opts ...RunOption) (*Ru
 
 	var hookSet *wire.HookSet
 	if ro.Hooks != nil {
-		hookSet = buildHookSet(ro.Hooks, s.id, runID, s.agentName)
+		hookSet = buildHookSet(ro.Hooks, s.id, runID)
 	}
 
 	if s.scope != nil {
@@ -80,7 +92,7 @@ func (s *Session) Run(ctx context.Context, input string, opts ...RunOption) (*Ru
 	}
 
 	if ro.Stream != nil {
-		unsub := stream.SubscribeTextDeltas(s.ag.EventBus(), func(delta, accumulated string) {
+		unsub := subscribeTextDeltas(s.ag.EventBus(), func(delta, accumulated string) {
 			ro.Stream(TextChunk{Delta: delta, Text: accumulated})
 		})
 		defer unsub()
@@ -93,26 +105,11 @@ func (s *Session) Run(ctx context.Context, input string, opts ...RunOption) (*Ru
 
 	var turns int
 	var maxTurnsExceeded bool
-	var hookStopped bool
 	unsubTurns := s.ag.EventBus().Subscribe(func(e pithagent.AgentEvent) {
 		if e.LoopEvent == nil || e.LoopEvent.Type != loop.LoopTurnEnd {
 			return
 		}
 		turns++
-
-		if ro.Hooks != nil && ro.Hooks.ShouldStopAfterTurn != nil {
-			if ro.Hooks.ShouldStopAfterTurn(TurnContext{
-				RunID:      runID,
-				SessionID:  s.id,
-				AgentName:  s.agentName,
-				TurnNumber: turns,
-			}) {
-				hookStopped = true
-				s.ag.Abort()
-				return
-			}
-		}
-
 		if turns >= maxTurns {
 			maxTurnsExceeded = true
 			s.ag.Abort()
@@ -124,29 +121,42 @@ func (s *Session) Run(ctx context.Context, input string, opts ...RunOption) (*Ru
 	if maxTurnsExceeded {
 		err = fmt.Errorf("max turns (%d) exceeded", maxTurns)
 	}
-	if hookStopped {
-		err = nil
-	}
 	state := s.ag.State()
 
 	summaries := summary.ToSummaries(state.Messages)
 	result := &RunResult{
 		RunID:    runID,
 		Text:     summary.LastAssistantText(state.Messages),
-		Messages: toPublicSummaries(summaries),
+		Messages: summaries,
 		Usage:    toPublicUsage(summary.LastUsage(state.Messages)),
 	}
 	return result, err
 }
 
-func buildHookSet(h *Hooks, sessionID, runID, agentName string) *wire.HookSet {
+func subscribeTextDeltas(bus *pithagent.EventBus, onDelta func(delta, accumulated string)) func() {
+	return bus.Subscribe(func(event pithagent.AgentEvent) {
+		if event.LoopEvent == nil || event.LoopEvent.Type != loop.LoopMessageUpdate {
+			return
+		}
+		se := event.LoopEvent.StreamEvent
+		if se == nil || se.Type != protocol.EventTextDelta {
+			return
+		}
+		accumulated := ""
+		if se.Partial != nil {
+			accumulated = summary.AssistantText(*se.Partial)
+		}
+		onDelta(se.Delta, accumulated)
+	})
+}
+
+func buildHookSet(h *Hooks, sessionID, runID string) *wire.HookSet {
 	hs := &wire.HookSet{}
 	if h.BeforeToolCall != nil {
-		hs.BeforeToolCall = func(sid, rid, an, toolName, callID string, args map[string]any) (bool, string, error) {
+		hs.BeforeToolCall = func(sid, rid, toolName, callID string, args map[string]any) (bool, string, error) {
 			res, err := h.BeforeToolCall(BeforeToolContext{
 				RunID:     rid,
 				SessionID: sid,
-				AgentName: an,
 				ToolName:  toolName,
 				CallID:    callID,
 				Args:      args,
@@ -161,11 +171,10 @@ func buildHookSet(h *Hooks, sessionID, runID, agentName string) *wire.HookSet {
 		}
 	}
 	if h.AfterToolCall != nil {
-		hs.AfterToolCall = func(sid, rid, an, toolName, callID string, args map[string]any, result string, resultErr error) (string, error) {
+		hs.AfterToolCall = func(sid, rid, toolName, callID string, args map[string]any, result string, resultErr error) (string, error) {
 			res, err := h.AfterToolCall(AfterToolContext{
 				RunID:     rid,
 				SessionID: sid,
-				AgentName: an,
 				ToolName:  toolName,
 				CallID:    callID,
 				Args:      args,
@@ -182,14 +191,6 @@ func buildHookSet(h *Hooks, sessionID, runID, agentName string) *wire.HookSet {
 		}
 	}
 	return hs
-}
-
-func toPublicSummaries(in []summary.MessageSummary) []MessageSummary {
-	out := make([]MessageSummary, len(in))
-	for i, m := range in {
-		out[i] = MessageSummary{Role: m.Role, Text: m.Text}
-	}
-	return out
 }
 
 func toPublicUsage(in *summary.UsageSummary) *UsageSummary {

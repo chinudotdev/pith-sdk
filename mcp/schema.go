@@ -1,13 +1,12 @@
-package internal
+package mcp
 
 import (
 	"encoding/json"
 	"fmt"
 )
 
-// MarshalSchema converts a Go value to a map[string]any JSON Schema.
-// Returns a nil map and nil error when v is nil.
-func MarshalSchema(v any) (map[string]any, error) {
+// marshalSchema converts a Go value to a map[string]any JSON Schema.
+func marshalSchema(v any) (map[string]any, error) {
 	if v == nil {
 		return nil, nil
 	}

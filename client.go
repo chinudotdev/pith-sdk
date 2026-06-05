@@ -1,7 +1,6 @@
 package pithsdk
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/chinudotdev/pith/gateway"
@@ -88,7 +87,7 @@ func (c *Client) NewSession(agent *Agent, opts ...SessionOption) (*Session, erro
 
 	settings := mergeSettings(c.defaultSettings, agent.settings)
 	scope := wire.NewRunScopeHolder()
-	loopTools := toWireTools(agent.tools, scope, agent.name)
+	loopTools := toWireTools(agent.tools, scope)
 	ag := wire.NewAgent(c.gw, model, agent.instructions, wire.Settings{
 		Temperature: settings.Temperature,
 		MaxTokens:   settings.MaxTokens,
@@ -99,16 +98,7 @@ func (c *Client) NewSession(agent *Agent, opts ...SessionOption) (*Session, erro
 		sessionID = newUUID()
 	}
 
-	return &Session{id: sessionID, agentName: agent.name, ag: ag, scope: scope}, nil
-}
-
-// RunOnce runs a single prompt without requiring the caller to manage a Session.
-func (c *Client) RunOnce(ctx context.Context, agent *Agent, input string, opts ...RunOption) (*RunResult, error) {
-	session, err := c.NewSession(agent)
-	if err != nil {
-		return nil, err
-	}
-	return session.Run(ctx, input, opts...)
+	return &Session{id: sessionID, ag: ag, scope: scope}, nil
 }
 
 func mergeSettings(base, override *ModelSettings) ModelSettings {

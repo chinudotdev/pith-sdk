@@ -3,6 +3,7 @@ package wire
 import (
 	"context"
 	"fmt"
+	"maps"
 )
 
 // RunCtx returns the active run context from holder, or context.Background().
@@ -14,7 +15,11 @@ func RunCtx(holder *RunScopeHolder) context.Context {
 }
 
 // RunWithHooks runs BeforeToolCall, invoke, and AfterToolCall for a tool handler.
-func RunWithHooks(holder *RunScopeHolder, agentName, toolName, callID string, params map[string]any, run func() (string, error)) (string, error) {
+func RunWithHooks(holder *RunScopeHolder, toolName, callID string, params map[string]any, run func() (string, error)) (string, error) {
+	if params != nil {
+		params = maps.Clone(params)
+	}
+
 	var sessionID, runID string
 	var hooks *HookSet
 
@@ -25,7 +30,7 @@ func RunWithHooks(holder *RunScopeHolder, agentName, toolName, callID string, pa
 	}
 
 	if hooks != nil && hooks.BeforeToolCall != nil {
-		block, reason, err := hooks.BeforeToolCall(sessionID, runID, agentName, toolName, callID, params)
+		block, reason, err := hooks.BeforeToolCall(sessionID, runID, toolName, callID, params)
 		if err != nil {
 			return "", err
 		}
@@ -37,7 +42,7 @@ func RunWithHooks(holder *RunScopeHolder, agentName, toolName, callID string, pa
 	result, invokeErr := run()
 
 	if hooks != nil && hooks.AfterToolCall != nil {
-		override, hookErr := hooks.AfterToolCall(sessionID, runID, agentName, toolName, callID, params, result, invokeErr)
+		override, hookErr := hooks.AfterToolCall(sessionID, runID, toolName, callID, params, result, invokeErr)
 		if hookErr != nil {
 			return "", hookErr
 		}

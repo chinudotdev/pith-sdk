@@ -27,11 +27,10 @@ type ToolContext struct {
 	CallID string
 }
 
-// Tool is an opaque tool definition. Create with NewTool, NewDynamicTool, or RawTool.
+// Tool is an opaque tool definition. Create with NewTool.
 type Tool struct {
 	typed   *typedTool
 	dynamic *dynamicTool
-	raw     *loop.AgentTool
 }
 
 type typedTool struct {
@@ -47,6 +46,20 @@ type dynamicTool struct {
 	description string
 	schema      map[string]any
 	fn          func(context.Context, map[string]any) (string, error)
+}
+
+// ToolFromDynamicSchema creates a schema-driven tool with untyped map arguments.
+// It is used by the mcp adapter; prefer mcp.Tools() for MCP-discovered tools.
+func ToolFromDynamicSchema(name, description string, schema map[string]any,
+	fn func(context.Context, map[string]any) (string, error)) Tool {
+	return Tool{
+		dynamic: &dynamicTool{
+			name:        name,
+			description: description,
+			schema:      schema,
+			fn:          fn,
+		},
+	}
 }
 
 // NewTool creates a typed tool from a struct argument type T and handler function.
@@ -97,37 +110,10 @@ func NewTool[T any](name, description string, fn func(ToolContext, T) (string, e
 	}
 }
 
-// NewDynamicTool creates a schema-driven tool with untyped map arguments.
-// The handler receives the active Session.Run context at invoke time.
-// Errors returned by the handler are converted to text in the wire layer, consistent with NewTool.
-func NewDynamicTool(name, description string, schema map[string]any,
-	fn func(context.Context, map[string]any) (string, error)) Tool {
-	return Tool{
-		dynamic: &dynamicTool{
-			name:        name,
-			description: description,
-			schema:      schema,
-			fn:          fn,
-		},
-	}
-}
-
-// RawTool wraps a pre-built loop.AgentTool. Before/After hooks and tracing IDs apply;
-// full ToolContext injection does not (advanced escape hatch).
-func RawTool(t loop.AgentTool) Tool {
-	cp := t
-	return Tool{raw: &cp}
-}
-
-func toWireTools(tools []Tool, holder *wire.RunScopeHolder, agentName string) []loop.AgentTool {
+func toWireTools(tools []Tool, holder *wire.RunScopeHolder) []loop.AgentTool {
 	var typed []wire.TypedTool
-	var raw []loop.AgentTool
 
 	for _, tool := range tools {
-		if tool.raw != nil {
-			raw = append(raw, *tool.raw)
-			continue
-		}
 		if tool.dynamic != nil {
 			dd := tool.dynamic
 			toolName := dd.name
@@ -136,7 +122,7 @@ func toWireTools(tools []Tool, holder *wire.RunScopeHolder, agentName string) []
 				Description: dd.description,
 				Parameters:  dd.schema,
 				Handler: func(holder *wire.RunScopeHolder, callID string, params map[string]any) (string, error) {
-					return wire.RunWithHooks(holder, agentName, toolName, callID, params, func() (string, error) {
+					return wire.RunWithHooks(holder, toolName, callID, params, func() (string, error) {
 						return dd.fn(wire.RunCtx(holder), params)
 					})
 				},
@@ -153,7 +139,7 @@ func toWireTools(tools []Tool, holder *wire.RunScopeHolder, agentName string) []
 			Description: td.description,
 			Parameters:  td.parameters,
 			Handler: func(holder *wire.RunScopeHolder, callID string, params map[string]any) (string, error) {
-				return wire.RunWithHooks(holder, agentName, toolName, callID, params, func() (string, error) {
+				return wire.RunWithHooks(holder, toolName, callID, params, func() (string, error) {
 					decoded, err := td.decode(params)
 					if err != nil {
 						return "", err
@@ -178,5 +164,5 @@ func toWireTools(tools []Tool, holder *wire.RunScopeHolder, agentName string) []
 		})
 	}
 
-	return wire.ToAgentTools(typed, raw, holder, agentName)
+	return wire.ToAgentTools(typed, holder)
 }

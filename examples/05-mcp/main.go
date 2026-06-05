@@ -57,7 +57,6 @@ func main() {
 	}
 
 	agent, err := pithsdk.NewAgent(pithsdk.AgentConfig{
-		Name:         "MCP demo",
 		Instructions: "You are a helpful assistant. Use the echo tool when asked to echo text.",
 		Model:        "gpt-4o-mini",
 		Tools:        allTools,
@@ -90,10 +89,17 @@ func buildEchoServer() (string, func()) {
 	}
 	bin := filepath.Join(dir, "echo-server")
 
-	cmd := exec.Command("go", "build", "-o", bin, "./examples/05-mcp/echo-server")
-	if out, err := cmd.CombinedOutput(); err != nil {
-		os.RemoveAll(dir)
-		log.Fatalf("build echo server: %v\n%s", err, out)
+	paths := []string{"./examples/05-mcp/echo-server", "./echo-server"}
+	var out []byte
+	var buildErr error
+	for _, src := range paths {
+		cmd := exec.Command("go", "build", "-o", bin, src)
+		out, buildErr = cmd.CombinedOutput()
+		if buildErr == nil {
+			return bin, func() { os.RemoveAll(dir) }
+		}
 	}
-	return bin, func() { os.RemoveAll(dir) }
+	os.RemoveAll(dir)
+	log.Fatalf("build echo server: %v\n%s", buildErr, out)
+	return "", nil
 }

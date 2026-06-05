@@ -9,7 +9,6 @@ import (
 
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	pithsdk "github.com/chinudotdev/pith-sdk"
-	"github.com/chinudotdev/pith-sdk/internal"
 )
 
 // Config configures an MCP server connection.
@@ -54,13 +53,13 @@ func Tools(ctx context.Context, cfg Config) (tools []pithsdk.Tool, close func() 
 
 	for _, mcpTool := range listResult.Tools {
 		tool := mcpTool // capture
-		schema, err := internal.MarshalSchema(tool.InputSchema)
+		schema, err := marshalSchema(tool.InputSchema)
 		if err != nil {
 			session.Close()
 			return nil, nil, fmt.Errorf("mcp: schema for tool %q: %w", tool.Name, err)
 		}
 
-		parsedTool := pithsdk.NewDynamicTool(
+		parsedTool := dynamicTool(
 			tool.Name,
 			tool.Description,
 			schema,

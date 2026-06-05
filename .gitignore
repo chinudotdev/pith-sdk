@@ -1,4 +1,6 @@
 # Binaries
+/01-hello
+/02-tools
 /05-mcp
 bin/
 *.exe

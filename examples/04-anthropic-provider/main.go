@@ -36,7 +36,6 @@ func main() {
 	}
 
 	agent, err := pithsdk.NewAgent(pithsdk.AgentConfig{
-		Name:         "Assistant",
 		Instructions: "You are a helpful assistant. Be concise.",
 		Model:        "anthropic/claude-sonnet-4-20250514",
 	})

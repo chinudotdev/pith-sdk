@@ -37,7 +37,6 @@ func main() {
 	)
 
 	agent, err := pithsdk.NewAgent(pithsdk.AgentConfig{
-		Name:         "Weather bot",
 		Instructions: "You are a helpful weather bot. Use get_weather when asked about weather.",
 		Model:        "gpt-4o-mini",
 		Tools:        []pithsdk.Tool{weather},

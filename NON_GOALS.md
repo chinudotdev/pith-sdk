@@ -11,7 +11,7 @@ When the SDK is locked at **v1.0**, these remain out of scope unless a future ma
 | Feature | Why excluded | Alternative |
 |---------|--------------|-------------|
 | **Real handoffs** | Multi-agent orchestration is a separate concern from “define agent → run → get text.” Requires agent graphs, control transfer, and cross-agent run scope — not composable from `Tool` alone. | Manager-as-tool pattern (sub-agent inside a tool handler), app-level routing, or drop to `pith/agent` directly. See [plan.md §8](plan.md#8-feature-evaluation-handoffs). |
-| **Agents-as-tools (manager pattern)** | Same as handoffs — orchestration, not a single-agent runner. | `client.RunOnce(subAgent, ...)` inside a tool handler. |
+| **Agents-as-tools (manager pattern)** | Same as handoffs — orchestration, not a single-agent runner. | `NewSession(subAgent)` + `Run` inside a tool handler. |
 | **Guardrails (parallel LLM validation)** | Heavy, opinionated safety layer. OpenAI-style tripwires need concurrent model calls and run-level abort semantics the minimal SDK does not own. | Validate input before `Session.Run()`; use `BeforeToolCall` / `AfterToolCall` hooks for HITL and output checks. |
 | **Agent graphs / Temporal / durable execution** | Out of scope for a thin SDK. | Use workflow engines or `pith` primitives directly. |
 | **Built-in tracing dashboard** | Observability platform, not library responsibility. | `SessionID`, `RunID`, `CallID` + hooks → ship to OpenTelemetry, Datadog, etc. |
@@ -42,7 +42,21 @@ When the SDK is locked at **v1.0**, these remain out of scope unless a future ma
 
 ---
 
-## 4. Evaluated and deferred (SDK could expose, but we choose not to)
+## 4. Escape hatches removed in v0.3.0
+
+These were shipped in v0.2.x for advanced use but removed before v1 lock:
+
+| API | Why removed | Alternative |
+|-----|-------------|-------------|
+| `Client.RunOnce` | Two-line `NewSession` + `Run` is sufficient | `session, _ := client.NewSession(agent); session.Run(ctx, input)` |
+| `RawTool` | Duplicated hook path; bypassed `ToolContext` | `NewClientFromGateway` + `pith/loop` |
+| `NewDynamicTool` | MCP-only concern; bloated public surface | `mcp.Tools()` |
+| `Hooks.ShouldStopAfterTurn` | Overlaps `WithMaxTurns`; niche control flow | `WithMaxTurns(n)` or app-side abort |
+| `AgentConfig.Name` / `AgentName` in hooks | Unused by most apps; label via context instead | `WithContext(myLabel)` |
+
+---
+
+## 5. Evaluated and deferred (SDK could expose, but we choose not to)
 
 These exist in `pith` primitives but are intentionally not part of the locked SDK surface:
 
@@ -59,7 +73,7 @@ Power users: `NewClientFromGateway` + `pith/agent` directly.
 
 ---
 
-## 5. What “locked” means
+## 6. What “locked” means
 
 After **v1.0**:
 
@@ -70,7 +84,7 @@ After **v1.0**:
 
 ---
 
-## 6. Where to request changes
+## 7. Where to request changes
 
 | Request type | Open issue in |
 |--------------|---------------|

@@ -29,7 +29,6 @@ func main() {
 	}
 
 	agent, err := pithsdk.NewAgent(pithsdk.AgentConfig{
-		Name:         "Assistant",
 		Instructions: "You are helpful. Remember details the user shares in the conversation.",
 		Model:        "gpt-4o-mini",
 	})
