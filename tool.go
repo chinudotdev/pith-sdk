@@ -15,16 +15,23 @@ import (
 type ToolContext struct {
 	// Run is the context for the current Session.Run call.
 	Run context.Context
+	// RunID is the unique identifier for the current run.
+	RunID string
+	// SessionID is the unique identifier for the current session.
+	SessionID string
 	// Local holds run-scoped dependencies from WithContext; not sent to the model.
 	Local any
+	// ToolName is the name of the tool being invoked.
+	ToolName string
 	// CallID is the provider-assigned tool call identifier.
 	CallID string
 }
 
-// Tool is an opaque tool definition. Create with NewTool or RawTool.
+// Tool is an opaque tool definition. Create with NewTool, NewDynamicTool, or RawTool.
 type Tool struct {
-	typed *typedTool
-	raw   *loop.AgentTool
+	typed   *typedTool
+	dynamic *dynamicTool
+	raw     *loop.AgentTool
 }
 
 type typedTool struct {
@@ -33,6 +40,13 @@ type typedTool struct {
 	parameters  map[string]any
 	decode      func(map[string]any) (any, error)
 	invoke      func(ToolContext, any) (string, error)
+}
+
+type dynamicTool struct {
+	name        string
+	description string
+	schema      map[string]any
+	fn          func(context.Context, map[string]any) (string, error)
 }
 
 // NewTool creates a typed tool from a struct argument type T and handler function.
@@ -83,13 +97,29 @@ func NewTool[T any](name, description string, fn func(ToolContext, T) (string, e
 	}
 }
 
-// RawTool wraps a pre-built loop.AgentTool without ToolContext injection.
+// NewDynamicTool creates a schema-driven tool with untyped map arguments.
+// The handler receives the active Session.Run context at invoke time.
+// Errors returned by the handler are converted to text in the wire layer, consistent with NewTool.
+func NewDynamicTool(name, description string, schema map[string]any,
+	fn func(context.Context, map[string]any) (string, error)) Tool {
+	return Tool{
+		dynamic: &dynamicTool{
+			name:        name,
+			description: description,
+			schema:      schema,
+			fn:          fn,
+		},
+	}
+}
+
+// RawTool wraps a pre-built loop.AgentTool. Before/After hooks and tracing IDs apply;
+// full ToolContext injection does not (advanced escape hatch).
 func RawTool(t loop.AgentTool) Tool {
 	cp := t
 	return Tool{raw: &cp}
 }
 
-func toWireTools(tools []Tool, holder *wire.RunScopeHolder) []loop.AgentTool {
+func toWireTools(tools []Tool, holder *wire.RunScopeHolder, agentName string) []loop.AgentTool {
 	var typed []wire.TypedTool
 	var raw []loop.AgentTool
 
@@ -98,36 +128,55 @@ func toWireTools(tools []Tool, holder *wire.RunScopeHolder) []loop.AgentTool {
 			raw = append(raw, *tool.raw)
 			continue
 		}
+		if tool.dynamic != nil {
+			dd := tool.dynamic
+			toolName := dd.name
+			typed = append(typed, wire.TypedTool{
+				Name:        dd.name,
+				Description: dd.description,
+				Parameters:  dd.schema,
+				Handler: func(holder *wire.RunScopeHolder, callID string, params map[string]any) (string, error) {
+					return wire.RunWithHooks(holder, agentName, toolName, callID, params, func() (string, error) {
+						return dd.fn(wire.RunCtx(holder), params)
+					})
+				},
+			})
+			continue
+		}
 		if tool.typed == nil {
 			continue
 		}
 		td := tool.typed
+		toolName := td.name
 		typed = append(typed, wire.TypedTool{
 			Name:        td.name,
 			Description: td.description,
 			Parameters:  td.parameters,
 			Handler: func(holder *wire.RunScopeHolder, callID string, params map[string]any) (string, error) {
-				decoded, err := td.decode(params)
-				if err != nil {
-					return "", err
-				}
-				var runCtx context.Context
-				var local any
-				if scope := holder.Current(); scope != nil {
-					runCtx = scope.Ctx
-					local = scope.Local
-				}
-				if runCtx == nil {
-					runCtx = context.Background()
-				}
-				return td.invoke(ToolContext{
-					Run:    runCtx,
-					Local:  local,
-					CallID: callID,
-				}, decoded)
+				return wire.RunWithHooks(holder, agentName, toolName, callID, params, func() (string, error) {
+					decoded, err := td.decode(params)
+					if err != nil {
+						return "", err
+					}
+					var sessionID, runID string
+					var local any
+					if scope := holder.Current(); scope != nil {
+						sessionID = scope.SessionID
+						runID = scope.RunID
+						local = scope.Local
+					}
+					return td.invoke(ToolContext{
+						Run:       wire.RunCtx(holder),
+						RunID:     runID,
+						SessionID: sessionID,
+						Local:     local,
+						ToolName:  toolName,
+						CallID:    callID,
+					}, decoded)
+				})
 			},
 		})
 	}
 
-	return wire.ToAgentTools(typed, raw, holder)
+	return wire.ToAgentTools(typed, raw, holder, agentName)
 }

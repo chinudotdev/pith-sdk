@@ -123,6 +123,69 @@ Limit tool-calling loop iterations per run (default 10):
 session.Run(ctx, input, pithsdk.WithMaxTurns(5))
 ```
 
+## Tracing IDs
+
+Every session and run gets a unique ID for observability. Override or read them:
+
+```go
+session, _ := client.NewSession(agent, pithsdk.WithSessionID("my-session"))
+fmt.Println(session.ID()) // "my-session"
+
+result, _ := session.Run(ctx, "Hi", pithsdk.WithRunID("run-42"))
+fmt.Println(result.RunID) // "run-42"
+```
+
+IDs are also available inside tool handlers:
+
+```go
+func(ctx pithsdk.ToolContext, args struct{ City string `json:"city"` }) (string, error) {
+    fmt.Println(ctx.SessionID, ctx.RunID, ctx.ToolName, ctx.CallID)
+    return "Sunny", nil
+}
+```
+
+Auto-generated UUIDs are used when IDs are not provided.
+
+## Hooks
+
+Add lifecycle callbacks to tool execution and turn control:
+
+```go
+session.Run(ctx, "Go", pithsdk.WithHooks(pithsdk.Hooks{
+    BeforeToolCall: func(ctx pithsdk.BeforeToolContext) (*pithsdk.BeforeToolResult, error) {
+        if ctx.ToolName == "dangerous_tool" {
+            return &pithsdk.BeforeToolResult{Block: true, Reason: "not allowed"}, nil
+        }
+        return nil, nil
+    },
+    AfterToolCall: func(ctx pithsdk.AfterToolContext) (*pithsdk.AfterToolResult, error) {
+        log.Printf("tool %s returned: %s", ctx.ToolName, ctx.Result)
+        return nil, nil
+    },
+    ShouldStopAfterTurn: func(ctx pithsdk.TurnContext) bool {
+        return ctx.TurnNumber >= 3 // stop after 3 turns
+    },
+}))
+```
+
+Hooks apply to all SDK-created tools, including typed tools (`NewTool`), schema-driven tools (`NewDynamicTool`), and MCP-discovered tools from `mcp.Tools()`. `RawTool` is an advanced escape hatch for pre-built `loop.AgentTool` values: hooks and tracing IDs apply, but full `ToolContext` injection does not.
+
+## MCP tools
+
+Discover tools from MCP (Model Context Protocol) servers and compose them with local tools:
+
+```go
+import "github.com/chinudotdev/pith-sdk/mcp"
+
+mcpTools, close, _ := mcp.Tools(ctx, mcp.Config{
+    Command: "path/to/mcp-server",
+    Args:    []string{"--flag"},
+})
+defer close()
+
+allTools := append(localTools, mcpTools...)
+```
+
 ## API overview
 
 | Type | Role |
@@ -137,7 +200,7 @@ session.Run(ctx, input, pithsdk.WithMaxTurns(5))
 ## Installation
 
 ```bash
-go get github.com/chinudotdev/pith-sdk@v0.1.0
+go get github.com/chinudotdev/pith-sdk@latest
 ```
 
 Requires Go 1.24+.
@@ -150,6 +213,7 @@ Requires Go 1.24+.
 | [02-tools](examples/02-tools/) | Agent with custom tools |
 | [03-multi-turn](examples/03-multi-turn/) | Multi-turn conversation with streaming |
 | [04-anthropic-provider](examples/04-anthropic-provider/) | Custom Anthropic provider via `RegisterProvider` |
+| [05-mcp](examples/05-mcp/) | Compose local and MCP tools |
 
 Run from the repo root:
 
@@ -158,11 +222,14 @@ OPENAI_API_KEY="sk-..." go run ./examples/01-hello/main.go
 OPENAI_API_KEY="sk-..." go run ./examples/02-tools/main.go
 OPENAI_API_KEY="sk-..." go run ./examples/03-multi-turn/main.go
 ANTHROPIC_API_KEY="sk-ant-..." go run ./examples/04-anthropic-provider/
+OPENAI_API_KEY="sk-..." go run ./examples/05-mcp/main.go
 ```
 
 ## Releases
 
-**v0.1.0** is the first public release. See [CHANGELOG.md](CHANGELOG.md) for details.
+**v0.1.0** — Core run path, tools, sessions, providers. See [CHANGELOG.md](CHANGELOG.md) for details.
+
+**v0.2.0** — Hooks, tracing IDs, `pithsdk/mcp`.
 
 Future work is tracked in [plan.md](plan.md).
 

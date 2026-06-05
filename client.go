@@ -69,10 +69,12 @@ func (c *Client) syncCredentials() {
 }
 
 // NewSession creates a session for the given agent definition.
-func (c *Client) NewSession(agent *Agent) (*Session, error) {
+func (c *Client) NewSession(agent *Agent, opts ...SessionOption) (*Session, error) {
 	if agent == nil {
 		return nil, fmt.Errorf("agent is required")
 	}
+
+	so := applySessionOptions(opts)
 
 	modelString := agent.model
 	if modelString == "" {
@@ -86,13 +88,18 @@ func (c *Client) NewSession(agent *Agent) (*Session, error) {
 
 	settings := mergeSettings(c.defaultSettings, agent.settings)
 	scope := wire.NewRunScopeHolder()
-	loopTools := toWireTools(agent.tools, scope)
+	loopTools := toWireTools(agent.tools, scope, agent.name)
 	ag := wire.NewAgent(c.gw, model, agent.instructions, wire.Settings{
 		Temperature: settings.Temperature,
 		MaxTokens:   settings.MaxTokens,
 	}, loopTools)
 
-	return &Session{ag: ag, scope: scope}, nil
+	sessionID := so.sessionID
+	if sessionID == "" {
+		sessionID = newUUID()
+	}
+
+	return &Session{id: sessionID, agentName: agent.name, ag: ag, scope: scope}, nil
 }
 
 // RunOnce runs a single prompt without requiring the caller to manage a Session.

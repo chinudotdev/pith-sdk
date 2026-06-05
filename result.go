@@ -4,6 +4,8 @@ const defaultMaxTurns = 10
 
 // RunResult is the outcome of a single Session.Run call.
 type RunResult struct {
+	// RunID is the unique identifier for this run, auto-generated unless overridden via WithRunID.
+	RunID string
 	// Text is the final assistant response text.
 	Text string
 	// Messages is the session transcript after this run, as simplified summaries.
@@ -40,6 +42,8 @@ type TextChunk struct {
 
 // RunOptions configures a single run. Apply via RunOption functions.
 type RunOptions struct {
+	// RunID overrides the auto-generated run identifier. Empty triggers auto-generation.
+	RunID string
 	// Context holds run-scoped local dependencies exposed as ToolContext.Local.
 	Context any
 	// Instructions overrides the agent system prompt for this run only.
@@ -48,4 +52,6 @@ type RunOptions struct {
 	Stream func(chunk TextChunk)
 	// MaxTurns limits tool-calling loop iterations for this run. Zero uses defaultMaxTurns (10).
 	MaxTurns int
+	// Hooks are lifecycle callbacks for this run.
+	Hooks *Hooks
 }
