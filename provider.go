@@ -14,23 +14,33 @@ const (
 
 // ProviderRegistration registers a custom LLM provider and its models on the client.
 type ProviderRegistration struct {
+	// Provider implements gateway.ProviderPort for the custom API.
 	Provider gateway.ProviderPort
 
-	// Credentials — one of:
-	APIKey     string
-	APIKeyEnv  string
+	// Credentials — set exactly one of the following:
+	// APIKey is a static API key string.
+	APIKey string
+	// APIKeyEnv names an environment variable holding the API key (e.g. "ANTHROPIC_API_KEY").
+	APIKeyEnv string
+	// Credential is a custom resolver returning the API key for the provider ID.
 	Credential func(providerID string) (string, error)
 
+	// Models lists model presets to register in the gateway catalog.
 	Models []ModelPreset
 }
 
 // ModelPreset describes a model to register in the gateway catalog.
 type ModelPreset struct {
-	ID            string
-	Name          string
-	BaseURL       string // optional; provider may use its own default
-	ContextWindow int    // 0 = SDK default
-	MaxTokens     int    // 0 = SDK default
+	// ID is the model identifier used in provider/model strings.
+	ID string
+	// Name is an optional display name; defaults to ID.
+	Name string
+	// BaseURL is an optional API base URL; the provider may use its own default.
+	BaseURL string
+	// ContextWindow is the model context size; zero uses the SDK default.
+	ContextWindow int
+	// MaxTokens is the default max output tokens; zero uses the SDK default.
+	MaxTokens int
 }
 
 // RegisterProvider registers a custom provider, its models, and credentials.

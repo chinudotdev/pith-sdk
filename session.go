@@ -2,14 +2,16 @@ package pithsdk
 
 import (
 	"context"
+	"fmt"
 
 	pithagent "github.com/chinudotdev/pith/agent"
+	"github.com/chinudotdev/pith/loop"
 	"github.com/chinudotdev/pith-sdk/internal/stream"
 	"github.com/chinudotdev/pith-sdk/internal/summary"
 	"github.com/chinudotdev/pith-sdk/internal/wire"
 )
 
-// Session runs an agent and holds its transcript for the current session.
+// Session runs an agent and holds its transcript across multiple Run calls.
 type Session struct {
 	ag    *pithagent.Agent
 	scope *wire.RunScopeHolder
@@ -48,7 +50,29 @@ func (s *Session) Run(ctx context.Context, input string, opts ...RunOption) (*Ru
 		defer unsub()
 	}
 
+	maxTurns := ro.MaxTurns
+	if maxTurns <= 0 {
+		maxTurns = defaultMaxTurns
+	}
+
+	var turns int
+	var maxTurnsExceeded bool
+	unsubTurns := s.ag.EventBus().Subscribe(func(e pithagent.AgentEvent) {
+		if e.LoopEvent == nil || e.LoopEvent.Type != loop.LoopTurnEnd {
+			return
+		}
+		turns++
+		if turns >= maxTurns {
+			maxTurnsExceeded = true
+			s.ag.Abort()
+		}
+	})
+	defer unsubTurns()
+
 	err := s.ag.Prompt(ctx, input)
+	if maxTurnsExceeded {
+		err = fmt.Errorf("max turns (%d) exceeded", maxTurns)
+	}
 	state := s.ag.State()
 
 	summaries := summary.ToSummaries(state.Messages)

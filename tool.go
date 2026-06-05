@@ -13,8 +13,11 @@ import (
 
 // ToolContext is passed to tool handlers during execution.
 type ToolContext struct {
-	Run    context.Context
-	Local  any
+	// Run is the context for the current Session.Run call.
+	Run context.Context
+	// Local holds run-scoped dependencies from WithContext; not sent to the model.
+	Local any
+	// CallID is the provider-assigned tool call identifier.
 	CallID string
 }
 
@@ -33,6 +36,7 @@ type typedTool struct {
 }
 
 // NewTool creates a typed tool from a struct argument type T and handler function.
+// T must be a struct; JSON Schema is generated from json and optional desc struct tags.
 func NewTool[T any](name, description string, fn func(ToolContext, T) (string, error)) Tool {
 	var zero T
 	t := reflect.TypeOf(zero)

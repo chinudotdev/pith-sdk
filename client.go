@@ -10,7 +10,7 @@ import (
 	"github.com/chinudotdev/pith-sdk/internal/wire"
 )
 
-// Client holds gateway configuration, credentials, and defaults.
+// Client holds gateway configuration, credentials, and defaults for running agents.
 type Client struct {
 	gw              *gateway.LLMGateway
 	defaultProvider string
@@ -22,9 +22,13 @@ type Client struct {
 
 // ClientConfig configures a new Client.
 type ClientConfig struct {
-	APIKey          string
+	// APIKey is the OpenAI-compatible API key. When empty, OPENAI_API_KEY is used at run time.
+	APIKey string
+	// DefaultProvider is the provider ID for bare model strings (default "openai").
 	DefaultProvider string
-	DefaultModel    string
+	// DefaultModel is used when an Agent has no Model set (default "gpt-4o-mini").
+	DefaultModel string
+	// DefaultSettings applies generation defaults to all agents unless overridden.
 	DefaultSettings *ModelSettings
 }
 

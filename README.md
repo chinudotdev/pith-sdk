@@ -117,10 +117,27 @@ agent, _ := pithsdk.NewAgent(pithsdk.AgentConfig{
 
 Use `provider/model` strings when not using the default OpenAI provider. See [examples/04-anthropic-provider](examples/04-anthropic-provider/) for a full custom provider implementation.
 
+Limit tool-calling loop iterations per run (default 10):
+
+```go
+session.Run(ctx, input, pithsdk.WithMaxTurns(5))
+```
+
+## API overview
+
+| Type | Role |
+|------|------|
+| `Client` | Gateway, credentials, defaults; creates sessions |
+| `Agent` | Specialist definition: instructions, model, tools |
+| `Session` | Runs the agent; holds multi-turn transcript |
+| `RunOnce` | One-shot run without managing a session |
+| `NewTool` | Typed tool with struct-based JSON Schema |
+| `RegisterProvider` | Custom `ProviderPort` + model catalog |
+
 ## Installation
 
 ```bash
-go get github.com/chinudotdev/pith-sdk@latest
+go get github.com/chinudotdev/pith-sdk@v0.1.0
 ```
 
 Requires Go 1.24+.
@@ -143,11 +160,11 @@ OPENAI_API_KEY="sk-..." go run ./examples/03-multi-turn/main.go
 ANTHROPIC_API_KEY="sk-ant-..." go run ./examples/04-anthropic-provider/
 ```
 
-## Roadmap
+## Releases
 
-See [plan.md](plan.md) for the full implementation plan. Upcoming:
+**v0.1.0** is the first public release. See [CHANGELOG.md](CHANGELOG.md) for details.
 
-- **Phase 5:** Polish, godoc, CHANGELOG, and `v0.1.0` release
+Future work is tracked in [plan.md](plan.md).
 
 ## License
 

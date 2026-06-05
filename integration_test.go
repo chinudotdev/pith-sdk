@@ -400,6 +400,45 @@ func TestRegisterProviderMissingCredential(t *testing.T) {
 	}
 }
 
+func TestSessionRunMaxTurnsExceeded(t *testing.T) {
+	noop := pithsdk.NewTool("noop", "No-op tool.",
+		func(ctx pithsdk.ToolContext, args struct{}) (string, error) {
+			return "ok", nil
+		},
+	)
+
+	gw := gateway.NewFauxGateway(
+		gateway.FauxResponse{
+			ToolCalls: []protocol.ToolCall{
+				{Type: "toolCall", ID: "tc1", Name: "noop", Arguments: `{}`},
+			},
+		},
+	)
+	client := pithsdk.NewClientFromGateway(gw)
+
+	agent, err := pithsdk.NewAgent(pithsdk.AgentConfig{
+		Instructions: "You are helpful.",
+		Model:        "faux-model",
+		Tools:        []pithsdk.Tool{noop},
+	})
+	if err != nil {
+		t.Fatalf("NewAgent: %v", err)
+	}
+
+	session, err := client.NewSession(agent)
+	if err != nil {
+		t.Fatalf("NewSession: %v", err)
+	}
+
+	_, err = session.Run(context.Background(), "Keep calling noop.", pithsdk.WithMaxTurns(2))
+	if err == nil {
+		t.Fatal("expected max turns error")
+	}
+	if !strings.Contains(err.Error(), "max turns (2) exceeded") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestClientRunOnce(t *testing.T) {
 	gw := gateway.NewFauxGateway(
 		gateway.FauxResponse{Text: "One-shot reply."},

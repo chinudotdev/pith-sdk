@@ -25,6 +25,14 @@ func WithStream(fn func(TextChunk)) RunOption {
 	}
 }
 
+// WithMaxTurns limits how many agent loop turns a single Run may take.
+// Zero uses the SDK default of 10.
+func WithMaxTurns(n int) RunOption {
+	return func(o *RunOptions) {
+		o.MaxTurns = n
+	}
+}
+
 func applyRunOptions(opts []RunOption) RunOptions {
 	var ro RunOptions
 	for _, opt := range opts {
