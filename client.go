@@ -1,6 +1,7 @@
 package pithsdk
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/chinudotdev/pith/gateway"
@@ -73,6 +74,15 @@ func (c *Client) NewSession(agent *Agent) (*Session, error) {
 	}, loopTools)
 
 	return &Session{ag: ag, scope: scope}, nil
+}
+
+// RunOnce runs a single prompt without requiring the caller to manage a Session.
+func (c *Client) RunOnce(ctx context.Context, agent *Agent, input string, opts ...RunOption) (*RunResult, error) {
+	session, err := c.NewSession(agent)
+	if err != nil {
+		return nil, err
+	}
+	return session.Run(ctx, input, opts...)
 }
 
 func mergeSettings(base, override *ModelSettings) ModelSettings {

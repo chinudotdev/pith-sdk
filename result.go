@@ -20,8 +20,15 @@ type UsageSummary struct {
 	Total  int
 }
 
+// TextChunk is a streaming text delta from the assistant response.
+type TextChunk struct {
+	Delta string // incremental text from EventTextDelta
+	Text  string // accumulated assistant text so far
+}
+
 // RunOptions configures a single run. Apply via RunOption functions.
 type RunOptions struct {
 	Context      any
 	Instructions string
+	Stream       func(chunk TextChunk) // nil = blocking
 }
