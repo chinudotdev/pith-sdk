@@ -7,8 +7,17 @@ import (
 
 // RunScope holds per-run context passed to tool handlers.
 type RunScope struct {
-	Ctx   context.Context
-	Local any
+	Ctx       context.Context
+	Local     any
+	SessionID string
+	RunID     string
+	Hooks     *HookSet
+}
+
+// HookSet holds SDK-level hooks for tool call lifecycle.
+type HookSet struct {
+	BeforeToolCall func(sessionID, runID, agentName, toolName, callID string, args map[string]any) (block bool, reason string, err error)
+	AfterToolCall  func(sessionID, runID, agentName, toolName, callID string, args map[string]any, result string, resultErr error) (override string, err error)
 }
 
 // RunScopeHolder stores the active run scope for tool execution.
@@ -23,10 +32,10 @@ func NewRunScopeHolder() *RunScopeHolder {
 }
 
 // Set activates a run scope for the current Session.Run call.
-func (h *RunScopeHolder) Set(ctx context.Context, local any) {
+func (h *RunScopeHolder) Set(ctx context.Context, local any, sessionID, runID string, hooks *HookSet) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	h.scope = &RunScope{Ctx: ctx, Local: local}
+	h.scope = &RunScope{Ctx: ctx, Local: local, SessionID: sessionID, RunID: runID, Hooks: hooks}
 }
 
 // Clear removes the active run scope after a run completes.
