@@ -1,9 +1,6 @@
 package pithsdk
 
 import (
-	"fmt"
-	"os"
-
 	"github.com/chinudotdev/pith/gateway"
 	"github.com/chinudotdev/pith/gateway/providers"
 	"github.com/chinudotdev/pith/protocol"
@@ -24,27 +21,19 @@ func applyClientDefaults(cfg *ClientConfig) {
 	}
 }
 
-func resolveAPIKey(cfg ClientConfig) (string, error) {
+func resolveAPIKey(cfg ClientConfig) string {
 	if cfg.APIKey != "" {
-		return cfg.APIKey, nil
+		return cfg.APIKey
 	}
-	if key := os.Getenv("OPENAI_API_KEY"); key != "" {
-		return key, nil
-	}
-	return "", fmt.Errorf("API key required: set ClientConfig.APIKey or OPENAI_API_KEY")
+	return ""
 }
 
-func setupDefaultGateway(apiKey string) *gateway.LLMGateway {
+func setupDefaultGateway(creds credentialRegistry) *gateway.LLMGateway {
 	gw := gateway.NewLLMGateway()
 	gw.Providers.Register(providers.NewOpenAICompatProvider(providers.OpenAICompatConfig{
 		BaseURL: defaultBaseURL,
 	}))
-	gw.Credentials = gateway.CredentialProviderFunc(func(pid protocol.ProviderId) (protocol.Credential, error) {
-		if pid == defaultProviderID {
-			return protocol.ApiKey{Key: apiKey}, nil
-		}
-		return nil, &protocol.Error{Code: protocol.ErrAuth, Message: fmt.Sprintf("no credentials for provider %q", pid)}
-	})
+	gw.Credentials = creds.credentialProvider()
 	gw.Catalog.Register(defaultProviderID, defaultGPT4oMiniDescriptor())
 	return gw
 }
